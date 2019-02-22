@@ -235,7 +235,7 @@ namespace lang
                 new Section(".text",  0x60000020, code),    // IMAGE_SCN_MEM_READ  | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_CNT_CODE
                 new Section(".data",  0xC0000040, data),    // IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ    | IMAGE_SCN_CNT_INITIALIZED_DATA
                 new Section(".rdata", 0x40000040, rdata),   // IMAGE_SCN_MEM_READ  | IMAGE_SCN_CNT_INITIALIZED_DATA
-                new Section(".idata", 0x40000040, null),    // IMAGE_SCN_MEM_READ  | IMAGE_SCN_CNT_INITIALIZED_DATA
+                new Section(".idata", 0xC0000040, null),    // IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ    | IMAGE_SCN_CNT_INITIALIZED_DATA
             };
 
             Int32 va = baseOfCode;
@@ -296,10 +296,10 @@ namespace lang
         }
 
         
-        private Int64 sizeOfStackReserve = 200000;
-        private Int64 sizeOfStackCommit = 1000;
-        private Int64 sizeOfHeapReserve = 0;
-        private Int64 sizeOfHeapCommit = 0;
+        private Int64 sizeOfStackReserve    = 0x200000;
+        private Int64 sizeOfStackCommit     = 0x1000;
+        private Int64 sizeOfHeapReserve     = 0x100000;
+        private Int64 sizeOfHeapCommit      = 0x1000;
 
         public void WriteFile(string file) {
             Directory.CreateDirectory(Path.GetDirectoryName(file));
@@ -434,7 +434,7 @@ namespace lang
         private void WriteDataDirectories() {
             Write(
             /*0x70*/ new DataDirectory(),   // exportTable
-            /*0x78*/ new DataDirectory(sections[3].header.virtualAddress, 0x1000),   // importTable
+            /*0x78*/ new DataDirectory(sections[3].header.virtualAddress, sections[3].header.virtualSize),   // importTable
             /*0x80*/ new DataDirectory(),   // resourceTable
             /*0x88*/ new DataDirectory(),   // exceptionTable
             /*0x90*/ new DataDirectory(),   // certificateTable
