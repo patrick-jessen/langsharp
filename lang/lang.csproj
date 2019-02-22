@@ -45,8 +45,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
+    <Compile Include="main.cs" />
+    <Compile Include="x64\instruction.cs" />
+    <Compile Include="x64\lang.cs" />
+    <Compile Include="pe\Importer.cs" />
+    <Compile Include="pe\Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="x64\reg.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
