@@ -1,3 +1,6 @@
+#include <stdio.h>
+
 int main() {
-	return 42;
+	printf("Hello world");
+	return 111;
 }

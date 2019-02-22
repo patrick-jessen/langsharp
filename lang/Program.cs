@@ -7,27 +7,221 @@ using System.Threading.Tasks;
 
 namespace lang
 {
+    class Importer
+    {
+        private int baseOffset;
+        private int lookupTablesOffset;
+        private int addressTablesOffset;
+        private int dllNamesOffset;
+        private int namesOffset;
+
+        private List<Directory>     directories     = new List<Directory>();
+        private List<Table>         lookupTables    = new List<Table>();
+        private List<Table>         addressTables   = new List<Table>();
+        private List<String>        dllNames        = new List<string>();
+        private List<Name>          names           = new List<Name>();
+
+        private Dictionary<String, int> dlls = new Dictionary<string, int>();
+
+        public void Import(String symbol, String dll) { 
+            int descIdx;
+            if(!dlls.TryGetValue(dll, out descIdx)) {
+                descIdx = directories.Count;
+                dlls[dll] = descIdx;
+
+                directories.Add(new Directory());
+                lookupTables.Add(new Table());
+                addressTables.Add(new Table());
+                dllNames.Add(dll);
+            }
+
+            Int64 nameIdx = (Int64)names.Count;
+            names.Add(new Name(symbol));
+
+            lookupTables[descIdx].entries.Add(nameIdx);
+            addressTables[descIdx].entries.Add(nameIdx);
+        }
+
+        private class Directory {
+            Int32 importLookupTableRVA; // RVA to ImportLookupTable
+            Int32 timeStamp;            // reserved
+            Int32 forwarderChain;       // Not used
+            Int32 nameRVA;              // RVA to null-terminated DLL string
+            Int32 importAddressTableRVA;// Identical to importLookupTableRVA until the image is bound
+
+            public static int Size() {
+                return 20;
+            }
+
+            public void Update(Importer imp, int index) {
+                int entryOffset = 0;
+                for(int i = 0; i < index; i++) {
+                    entryOffset += imp.lookupTables[i].Size();
+                }
+
+                importLookupTableRVA = imp.baseOffset + imp.lookupTablesOffset + entryOffset;
+
+
+                entryOffset = 0;
+                for (int i = 0; i < index; i++) {
+                    entryOffset += imp.addressTables[i].Size();
+                }
+                importAddressTableRVA = imp.baseOffset + imp.addressTablesOffset + entryOffset;
+
+                entryOffset = 0;
+                for (int i = 0; i < index; i++) {
+                    entryOffset += imp.dllNames[i].Length + 1; // 0-terminated string
+                }
+                nameRVA = imp.baseOffset + imp.dllNamesOffset + entryOffset;
+            }
+
+            public void Write(Stream stream) {
+                WriteStream(stream, BitConverter.GetBytes(importLookupTableRVA));
+                WriteStream(stream, BitConverter.GetBytes(timeStamp));
+                WriteStream(stream, BitConverter.GetBytes(forwarderChain));
+                WriteStream(stream, BitConverter.GetBytes(nameRVA));
+                WriteStream(stream, BitConverter.GetBytes(importAddressTableRVA));
+            }
+        }
+        private class Table {
+            // only bits [0-30] are set
+            // they are RVAs to a name table entry
+            // last entry must be 0 to indicate end of table
+            public List<Int64> entries = new List<Int64>();
+
+            public int Size() {
+                return (entries.Count + 1) * 8; // Last entry is 0
+            }
+
+            public void Update(Importer imp, int index) {
+                int entryOffset = 0;
+                for(int i = 0; i < index; i++) {
+                    entryOffset += imp.names[i].Size();
+                }
+
+                entries[0] = imp.baseOffset + imp.namesOffset + entryOffset;
+            }
+
+            public void Write(Stream stream) {
+                foreach(Int64 e in entries) {
+                    WriteStream(stream, BitConverter.GetBytes(e));
+                }
+                WriteStream(stream, new byte[8]); // Last entry must be 0
+            }
+        }
+        private class Name {
+            public Name(String name) {
+                this.name = name;
+            }
+
+            private Int16 hint;     // An index into the export name pointer table
+            private String name;    // The name to import
+
+            public int Size() {
+                return 2 + name.Length + 1; // hint is 2 bytes. string is 0-terminated.
+            }
+
+            public void Write(Stream stream) {
+                WriteStream(stream, BitConverter.GetBytes(hint));
+                WriteStream(stream, Encoding.ASCII.GetBytes(name));
+                WriteStream(stream, new byte[1]); // hint + 0-terminated string
+            }
+        }
+
+        public void Write(Stream stream) {
+            foreach(Directory d in directories) {
+                d.Write(stream);
+            }
+            new Directory().Write(stream); // Null directory entry
+
+            foreach(Table t in lookupTables) {
+                t.Write(stream);
+            }
+
+            foreach(Name n in names) {
+                n.Write(stream);
+            }
+
+            foreach (Table t in addressTables) {
+                t.Write(stream);
+            }
+
+            foreach(String s in dllNames) {
+                WriteStream(stream, Encoding.ASCII.GetBytes(s));
+                WriteStream(stream, new byte[1]); // 0-terminated string
+            }
+
+        }
+
+        public void Update(int offset) {
+            this.baseOffset = offset;
+            this.lookupTablesOffset = (directories.Count + 1) * Directory.Size(); // Each directory is 20bytes. Last one is null
+
+            this.namesOffset = lookupTablesOffset;
+            foreach (Table t in lookupTables) {
+                this.namesOffset += t.Size();
+            }
+
+            this.addressTablesOffset = namesOffset;
+            foreach (Name n in names) {
+                this.addressTablesOffset += n.Size();
+            }
+          
+            this.dllNamesOffset = addressTablesOffset;
+            foreach (Table t in addressTables) {
+                this.dllNamesOffset += t.Size();
+            }
+
+            // UPDATE
+            for (int i = 0; i < directories.Count; i++) {
+                directories[i].Update(this, i);
+            }
+            for(int i = 0; i < lookupTables.Count; i++) {
+                lookupTables[i].Update(this, i);
+            }
+            for (int i = 0; i < addressTables.Count; i++) {
+                addressTables[i].Update(this, i);
+            }
+        }
+
+        public static void WriteStream(Stream s, byte[] data) {
+            s.Write(data, 0, data.Length);
+        }
+    }
+
     class Program
     {
         static void Main(string[] args)
         {
-            PE pe = new PE();
-
-            Section codeSec = new Section(".text");
-            Section dataSec = new Section(".data");
-
-            codeSec.SetData(new byte[] {
-                0xb8, 0x2b, 0x00, 0x00, 0x00,   // mov eax,0x2a
-                0xc3,                           // ret
-            });
-            //dataSec.SetData(new byte[0]);
-
-            pe.sections = new Section[] {
-                codeSec,
-                //dataSec
+            byte[] code = new byte[] {
+                0x55,                                       // push   rbp
+                0x48, 0x89, 0xe5,                           // mov    rbp,rsp
+                0x48, 0xC7, 0xC1, 0x00, 0x00, 0x00, 0x00,   // mov    rcx,0x0
+                0x48, 0xC7, 0xC2, 0x05, 0x20, 0x40, 0x00,   // mov    rdx,0x402005
+                0x49, 0xC7, 0xC0, 0x00, 0x20, 0x40, 0x00,   // mov    r8,0x402000
+                0x49, 0xC7, 0xC1, 0x00, 0x00, 0x00, 0x00,   // mov    r9,0x0
+                0xFF, 0x14, 0x25, 0x88, 0x40, 0x40, 0x00,   // call   QWORD PTR ds:0x404088
+                0x48, 0xC7, 0xC1, 0x00, 0x00, 0x00, 0x00,   // mov    rcx,0x0
+                0xFF, 0x14, 0x25, 0x78, 0x40, 0x40, 0x00,   // call   QWORD PTR ds:0x404078 
+                0xc9,                                       // leave
             };
 
 
+            Importer i = new Importer();
+            //i.Import("printf", "MSVCRT.dll");
+            i.Import("ExitProcess", "kernel32.dll");
+            i.Import("MessageBoxA", "user32.DLL");
+
+
+
+            byte[] data = new byte[] {
+                (byte)'t',(byte)'e',(byte)'x',(byte)'t',0x00,
+                (byte)'c',(byte)'a',(byte)'p',0x00,
+            };
+            byte[] rdata = new byte[1];
+
+
+            PE pe = new PE(code, data, rdata, i);
 
             pe.WriteFile("../../output/test.exe");
         }
@@ -36,16 +230,40 @@ namespace lang
 
     class PE
     {
+        public PE(byte[] code, byte[] data, byte[] rdata, Importer i) {
+            sections = new Section[] {
+                new Section(".text",  0x60000020, code),    // IMAGE_SCN_MEM_READ  | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_CNT_CODE
+                new Section(".data",  0xC0000040, data),    // IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ    | IMAGE_SCN_CNT_INITIALIZED_DATA
+                new Section(".rdata", 0x40000040, rdata),   // IMAGE_SCN_MEM_READ  | IMAGE_SCN_CNT_INITIALIZED_DATA
+                new Section(".idata", 0x40000040, null),    // IMAGE_SCN_MEM_READ  | IMAGE_SCN_CNT_INITIALIZED_DATA
+            };
+
+            Int32 va = baseOfCode;
+            Int32 ra = SizeOfHeaders;
+            foreach (Section s in sections) {
+                s.header.virtualAddress = va;
+                s.header.pointerToRawData = ra;
+
+                va += ((Int32)((float)s.header.virtualSize / sectionAlignment) + 1) * sectionAlignment;
+                ra += s.header.sizeOfRawData;
+            }
+
+            MemoryStream ms = new MemoryStream();
+            i.Update(sections[3].header.virtualAddress);
+            i.Write(ms);
+            sections[3].SetData(ms.ToArray());
+        }
+
         private Stream stream;
+        private Section[] sections;
         private const Byte majorLinkerVer = 0;
         private const Byte minorLinkerVer = 1;
         private const Int32 sectionAlignment        = 0x1000;   // Page size of x64 Windows
-        public  const Int32 fileAlignment           = 0x200;    // Default file alignment
+        private const Int32 fileAlignment           = 0x200;    // Default file alignment
         private const Int32 addressOfEntryPoint     = 0x1000;
         private const Int32 baseOfCode              = 0x1000;
         private const Int64 imageBase               = 0x400000; // Default base address of Win32 executables
-
-        public Section[] sections;
+        private const Int32 checksum                = 0;        // No applicable
 
         private Int16 NumSections {
             get { return (Int16)sections.Length; }
@@ -54,13 +272,10 @@ namespace lang
             get { return (Int32)DateTimeOffset.Now.ToUnixTimeSeconds(); }
         }
         private Int32 SizeOfCode {
-            get { return (Int32)sections[0].header.sizeOfRawData; }
+            get { return sections[0].header.sizeOfRawData; }
         }
         private Int32 SizeOfInitializedData {
-            get
-            {
-                return 0;// return (Int32)sections[1].header.sizeOfRawData; }
-            }
+            get { return sections[1].header.sizeOfRawData + sections[2].header.sizeOfRawData; /*+ sections[3].header.sizeOfRawData;*/ }
         }
         private Int32 SizeOfImage {
             get { return sections.Last().header.virtualAddress + sections.Last().header.virtualSize; }
@@ -80,13 +295,9 @@ namespace lang
             return (Int32)(0x40 + 0x04 + 0x14 + 0xF0 + 40 * sections.Length);
         }
 
-
-
-
-
-        private Int32 checksum = 0;
-        private Int64 sizeOfStackReserve = 0;
-        private Int64 sizeOfStackCommit = 0;
+        
+        private Int64 sizeOfStackReserve = 200000;
+        private Int64 sizeOfStackCommit = 1000;
         private Int64 sizeOfHeapReserve = 0;
         private Int64 sizeOfHeapCommit = 0;
 
@@ -99,20 +310,6 @@ namespace lang
         }
 
         private void WritePE() {
-            Int32 va = baseOfCode;
-            Int32 ra = SizeOfHeaders;
-            foreach(Section s in sections) {
-                s.header.virtualAddress = va;
-                s.header.pointerToRawData = ra;
-
-                va += ((Int32)((float)s.header.virtualSize / sectionAlignment) + 1) * sectionAlignment;
-                ra += s.header.sizeOfRawData;
-            }
-
-            // Hardcoded characteristics
-            sections[0].header.characteristics = 0x60000020; // IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_CNT_CODE
-            //sections[1].header.characteristics = 0xC0000040; // IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_INITIALIZED_DATA 
-
             WriteDOSHeader();
             WritePEHeader();
             WriteSectionsTable();
@@ -237,7 +434,7 @@ namespace lang
         private void WriteDataDirectories() {
             Write(
             /*0x70*/ new DataDirectory(),   // exportTable
-            /*0x78*/ new DataDirectory(),   // importTable
+            /*0x78*/ new DataDirectory(sections[3].header.virtualAddress, 0x1000),   // importTable
             /*0x80*/ new DataDirectory(),   // resourceTable
             /*0x88*/ new DataDirectory(),   // exceptionTable
             /*0x90*/ new DataDirectory(),   // certificateTable
@@ -269,7 +466,7 @@ namespace lang
             }
         }
 
-        private void Write(params byte[][] args) {
+        public void Write(params byte[][] args) {
             foreach(byte[] bytes in args)
                 stream.Write(bytes, 0, bytes.Length);
         }
@@ -292,46 +489,61 @@ namespace lang
                 BitConverter.GetBytes(h.characteristics)
             );
         }
-    }
 
+        class SectionHeader
+        {
+            public SectionHeader(String name, UInt32 characteristics)
+            {
+                if (name.Length >= 8) throw new Exception("section name must be at most 8 characters");
 
-    class SectionHeader {
-        public SectionHeader(String name) {
-            for (int i = 0; i < name.Length && i < 8; i++)
-                this.name[i] = (byte)name[i];
+                for (int i = 0; i < name.Length; i++)
+                    this.name[i] = (byte)name[i];
+
+                this.characteristics = characteristics;
+            }
+
+            public byte[] name = new byte[8];               /*0x00*/
+            public Int32 virtualSize;                       /*0x08*/
+            public Int32 virtualAddress;                    /*0x0C*/
+            public Int32 sizeOfRawData;                     /*0x10*/
+            public Int32 pointerToRawData;                  /*0x14*/
+            public const Int32 pointerToRelocations = 0;    /*0x18*/
+            public const Int32 pointerToLinenumbers = 0;    /*0x1C*/
+            public const Int16 numberOfRelocations = 0;     /*0x20*/
+            public const Int16 numberOfLinenumbers = 0;     /*0x22*/
+            public UInt32 characteristics;                  /*0x24*/
+            /*0x28 - size of section header*/
+        }
+        class Section
+        {
+            public SectionHeader header;
+            public byte[] data;
+
+            public Section(String name, UInt32 characteristics, byte[] data) {
+                header = new SectionHeader(name, characteristics);
+                if(data != null)
+                    SetData(data);
+            }
+
+            public void SetData(byte[] bytes) {
+                if (bytes == null || bytes.Length == 0) throw new Exception("length of data must be > 0");
+
+                Int32 alignedSize = ((Int32)((float)bytes.Length / PE.fileAlignment) + 1) * PE.fileAlignment;
+                data = bytes;
+                header.sizeOfRawData = alignedSize;
+                header.virtualSize = bytes.Length;
+            }
         }
 
-        public byte[] name = new byte[8];               /*0x00*/
-        public Int32 virtualSize;                       /*0x08*/
-        public Int32 virtualAddress;                    /*0x0C*/
-        public Int32 sizeOfRawData;                     /*0x10*/
-        public Int32 pointerToRawData;                  /*0x14*/
-        public const Int32 pointerToRelocations = 0;    /*0x18*/
-        public const Int32 pointerToLinenumbers = 0;    /*0x1C*/
-        public const Int16 numberOfRelocations  = 0;    /*0x20*/
-        public const Int16 numberOfLinenumbers  = 0;    /*0x22*/
-        public UInt32 characteristics;                  /*0x24*/
-        /*0x28 - size of section header*/
-    }
-    class Section {
-        public SectionHeader header;
-        public byte[] data;
-
-        public Section(String name) {
-            header = new SectionHeader(name);
-        }
-
-        public void SetData(byte[] bytes) {
-            Int32 alignedSize = ((Int32)((float)bytes.Length / PE.fileAlignment) + 1) * PE.fileAlignment;
-
-            data = bytes;
-            header.sizeOfRawData = alignedSize;
-            header.virtualSize = bytes.Length;
+        class DataDirectory
+        {
+            public DataDirectory(Int32 address = 0, Int32 size = 0) {
+                this.address = address;
+                this.size = size;
+            }
+            public Int32 address;
+            public Int32 size;
         }
     }
 
-    class DataDirectory {
-        public Int32 address;
-        public Int32 size;
-    }
 }
