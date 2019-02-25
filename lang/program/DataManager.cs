@@ -1,7 +1,7 @@
-﻿using System.Collections.Generic;
-using System.Security.Cryptography;
+﻿using lang.utils;
+using System.Collections.Generic;
 
-namespace lang.assembler
+namespace lang.program
 {
     class DataManager {
         public List<DataItem> itemList = new List<DataItem>();

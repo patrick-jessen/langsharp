@@ -1,18 +1,16 @@
-using lang.assembler;
+using lang.program;
 using lang.utils;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 namespace lang.linker.pe
 {
     class PE
     {
-        public PE(Assembler a) {
-            codeSection = new PECodeSection(this, a);
-            dataSection = new PEDataSection(this, a.data);
-            importSection = new PEImportSection(this, a.import);
+        public PE(Program prog) {
+            codeSection = new PECodeSection(this, prog.codeBlocks);
+            dataSection = new PEDataSection(this, prog.data);
+            importSection = new PEImportSection(this, prog.import);
         }
 
         private Writer w = new Writer();
@@ -237,8 +235,7 @@ namespace lang.linker.pe
             }
         }
        
-
-        class DataDirectory
+        private class DataDirectory
         {
             public DataDirectory(Int32 address = 0, Int32 size = 0) {
                 this.address = address;
@@ -247,7 +244,6 @@ namespace lang.linker.pe
             public Int32 address;
             public Int32 size;
         }
-
 
         public static int AlignSection(int val) {
             return ((Int32)((float)val / PE.sectionAlignment) + 1) * PE.sectionAlignment;

@@ -1,10 +1,8 @@
-﻿using System;
+﻿using lang.utils;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace lang.assembler
+namespace lang.program
 {
     public class ImportManager {
         public Dictionary<String, ImportLibrary> libraries = new Dictionary<String, ImportLibrary>();

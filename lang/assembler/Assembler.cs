@@ -7,9 +7,6 @@ namespace lang.assembler
     abstract class Assembler {
         public List<Instruction> instructions = new List<Instruction>();
 
-        public DataManager data = new DataManager();
-        public ImportManager import = new ImportManager();
-
         public int Size {
             get {
                 int s = 0;
@@ -18,7 +15,6 @@ namespace lang.assembler
                 return s;
             }
         }
-
 
         public void Add(params Instruction[] instructions) {
             foreach(Instruction i in instructions)

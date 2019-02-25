@@ -1,10 +1,5 @@
-﻿using lang.assembler;
+﻿using lang.program;
 using lang.utils;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace lang.linker.pe
 {

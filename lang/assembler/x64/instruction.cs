@@ -124,4 +124,105 @@ namespace lang.assembler
         }
     }
 
+    class NOP : Instruction
+    {
+        public NOP() : base(1) { }
+
+        public override void Write(Writer stream) {
+            stream.Write(0x90);
+        }
+        public override string ToString() { 
+            return Format(new byte[]{0x90}, "NOP");
+        }
+    }
+
+    class Sub : Instruction {
+        private Reg dst;
+        private int srcVal;
+
+        public Sub(Reg reg, int val) : base(7) {
+            this.dst = reg;
+            this.srcVal = val;
+        }
+
+        public override void Write(Writer stream) {
+            byte first = 0x48;
+            if (dst is Reg64) first = 0x49;
+
+            var tmp = BitConverter.GetBytes(srcVal);
+            stream.Write(first, 0x81, (byte)(0xE8 + dst), tmp[0], tmp[1], tmp[2], tmp[3]);
+        }
+
+        public override string ToString()
+        {
+            Writer s = new Writer();
+            Write(s);
+            return Format(s.GetBytes(), "sub", dst, Hex(srcVal));
+        }
+    }
+
+    class Add : Instruction
+    {
+        private Reg dst;
+        private int srcVal;
+
+        public Add(Reg reg, int val) : base(7)
+        {
+            this.dst = reg;
+            this.srcVal = val;
+        }
+
+        public override void Write(Writer stream)
+        {
+            byte first = 0x48;
+            if (dst is Reg64) first = 0x49;
+
+            var tmp = BitConverter.GetBytes(srcVal);
+            stream.Write(first, 0x81, (byte)(0xC0 + dst), tmp[0], tmp[1], tmp[2], tmp[3]);
+        }
+
+        public override string ToString()
+        {
+            Writer s = new Writer();
+            Write(s);
+            return Format(s.GetBytes(), "add", dst, Hex(srcVal));
+        }
+    }
+
+    class Ret : Instruction
+    {
+        public Ret() : base(1) { }
+        public override void Write(Writer stream) {
+            stream.Write(0xC3);
+        }
+        public override string ToString() {
+            return Format(new byte[] { 0xC3 }, "ret");
+        }
+    }
+
+    class Pop: Instruction
+    {
+        private Reg dst;
+
+        public Pop(Reg32 reg) : base(1) {
+            this.dst = reg;
+        }
+        public Pop(Reg64 reg) : base(2) {
+            this.dst = reg;
+        }
+
+        public override void Write(Writer stream) {
+            if(dst is Reg64)
+                stream.Write(0x41, (byte)(0x58 + dst));
+            else
+                stream.Write((byte)(0x58 + dst));
+        }
+
+        public override string ToString()
+        {
+            Writer s = new Writer();
+            Write(s);
+            return Format(s.GetBytes(), "pop", dst);
+        }
+    }
 }
