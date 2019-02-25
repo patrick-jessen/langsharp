@@ -1,63 +1,51 @@
+using lang.assembler;
+using lang.utils;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace pe
+namespace lang.linker.pe
 {
     class PE
     {
-        public PE(byte[] code, byte[] data, byte[] rdata, Importer i) {
-            sections = new Section[] {
-                new Section(".text",  0x60000020, code),    // IMAGE_SCN_MEM_READ  | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_CNT_CODE
-                new Section(".data",  0xC0000040, data),    // IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ    | IMAGE_SCN_CNT_INITIALIZED_DATA
-                new Section(".rdata", 0x40000040, rdata),   // IMAGE_SCN_MEM_READ  | IMAGE_SCN_CNT_INITIALIZED_DATA
-                new Section(".idata", 0xC0000040, null),    // IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ    | IMAGE_SCN_CNT_INITIALIZED_DATA
-            };
-
-            Int32 va = baseOfCode;
-            Int32 ra = SizeOfHeaders;
-            foreach (Section s in sections) {
-                s.header.virtualAddress = va;
-                s.header.pointerToRawData = ra;
-
-                va += ((Int32)((float)s.header.virtualSize / sectionAlignment) + 1) * sectionAlignment;
-                ra += s.header.sizeOfRawData;
-            }
-
-            MemoryStream ms = new MemoryStream();
-            i.Update(sections[3].header.virtualAddress);
-            i.Write(ms);
-            sections[3].SetData(ms.ToArray());
+        public PE(Assembler a) {
+            codeSection = new PECodeSection(this, a);
+            dataSection = new PEDataSection(this, a.data);
+            importSection = new PEImportSection(this, a.import);
         }
 
-        private Stream stream;
-        private Section[] sections;
+        private Writer w = new Writer();
+        public PECodeSection codeSection;
+        public PEDataSection dataSection;
+        public PEImportSection importSection;
+
         private const Byte majorLinkerVer = 0;
         private const Byte minorLinkerVer = 1;
         private const Int32 sectionAlignment        = 0x1000;   // Page size of x64 Windows
         private const Int32 fileAlignment           = 0x200;    // Default file alignment
         private const Int32 addressOfEntryPoint     = 0x1000;
-        private const Int32 baseOfCode              = 0x1000;
-        private const Int64 imageBase               = 0x400000; // Default base address of Win32 executables
+        public const Int32 baseOfCode               = 0x1000;
+        public const Int64 imageBase                = 0x400000; // Default base address of Win32 executables
         private const Int32 checksum                = 0;        // No applicable
 
         private Int16 NumSections {
-            get { return (Int16)sections.Length; }
+            get { return (Int16)3; }
         }
         private Int32 TimeStamp {
             get { return (Int32)DateTimeOffset.Now.ToUnixTimeSeconds(); }
         }
         private Int32 SizeOfCode {
-            get { return sections[0].header.sizeOfRawData; }
+            get { return codeSection.header.sizeOfRawData; }
         }
         private Int32 SizeOfInitializedData {
-            get { return sections[1].header.sizeOfRawData + sections[2].header.sizeOfRawData; /*+ sections[3].header.sizeOfRawData;*/ }
+            get { return dataSection.header.sizeOfRawData + importSection.header.sizeOfRawData; }
         }
         private Int32 SizeOfImage {
-            get { return sections.Last().header.virtualAddress + sections.Last().header.virtualSize; }
+            get { return importSection.header.NextVirtualAddress(); }
         }
-        private Int32 SizeOfHeaders {
-            get { return ((Int32)((float)GetActualSizeOfHeaders() / fileAlignment) + 1) * fileAlignment; }
+        public Int32 SizeOfHeaders {
+            get { return AlignFile(GetActualSizeOfHeaders()); }
         }
 
         private Int32 sizeOfUninitializedData = 0;
@@ -67,10 +55,9 @@ namespace pe
             // PE header: 0x04 bytes
             // File header: 0x14 bytes
             // Optional header: 0xF0 bytes
-            // Section size: 40 bytes
-            return (Int32)(0x40 + 0x04 + 0x14 + 0xF0 + 40 * sections.Length);
+            // Section size: 40 bytes * 3
+            return (Int32)(0x40 + 0x04 + 0x14 + 0xF0 + 40 * 3);
         }
-
         
         private Int64 sizeOfStackReserve    = 0x200000;
         private Int64 sizeOfStackCommit     = 0x1000;
@@ -78,9 +65,12 @@ namespace pe
         private Int64 sizeOfHeapCommit      = 0x1000;
 
         public void WriteFile(string file) {
-            Directory.CreateDirectory(Path.GetDirectoryName(file));
-            stream = File.Create(file);
             WritePE();
+
+            Directory.CreateDirectory(Path.GetDirectoryName(file));
+            Stream stream = File.Create(file);
+            byte[] bytes = w.GetBytes();
+            stream.Write(bytes, 0, bytes.Length);
             stream.Flush();
             stream.Close();
         }
@@ -89,12 +79,12 @@ namespace pe
             WriteDOSHeader();
             WritePEHeader();
             WriteSectionsTable();
-            Write(new byte[SizeOfHeaders - GetActualSizeOfHeaders()]); // Padding
+            w.Write(new byte[SizeOfHeaders - GetActualSizeOfHeaders()]); // Padding
             WriteSectionsData();
         }
 
         private void WriteDOSHeader() {
-            Write(
+            w.Write(
                 new byte[] {
                 /*0x00*/ 0x4D, 0x5A, // signature
 		        /*0x02*/ 0x00, 0x00, // lastsize
@@ -129,7 +119,7 @@ namespace pe
         }
 
         private void WritePEHeader() {
-            Write(
+            w.Write(
                 new byte[] {
                 /*0x00*/ 0x50, 0x45, 0x00, 0x00, // Signature
                 /*0x04*/
@@ -139,7 +129,7 @@ namespace pe
         }
 
         private void WriteFileHeader() {
-            Write(
+            w.Write(
                 new byte[] {
                 /*0x00*/ 0x64, 0x86, // Machine
                 },
@@ -158,7 +148,7 @@ namespace pe
         }
 
         private void WriteOptionalHeader() {
-            Write(
+            w.Write(
                 new byte[] {
                 /*0x00*/ 0x0B, 0x02, // Magic
 		        /*0x02*/ majorLinkerVer, // MajorLinkerVersion
@@ -208,9 +198,9 @@ namespace pe
         }
 
         private void WriteDataDirectories() {
-            Write(
+            WriteDataDirs(
             /*0x70*/ new DataDirectory(),   // exportTable
-            /*0x78*/ new DataDirectory(sections[3].header.virtualAddress, sections[3].header.virtualSize),   // importTable
+            /*0x78*/ new DataDirectory(importSection.header.virtualAddress, importSection.header.virtualSize),   // importTable
             /*0x80*/ new DataDirectory(),   // resourceTable
             /*0x88*/ new DataDirectory(),   // exceptionTable
             /*0x90*/ new DataDirectory(),   // certificateTable
@@ -230,86 +220,23 @@ namespace pe
         }
 
         private void WriteSectionsTable() {
-            foreach(Section s in sections) {
-                Write(s.header);
-            }
+            codeSection.WriteHeader(w);
+            dataSection.WriteHeader(w);
+            importSection.WriteHeader(w);
         }
 
         private void WriteSectionsData() {
-            foreach (Section s in sections) {
-                Write(s.data);
-                Write(new byte[s.header.sizeOfRawData - s.data.Length]);
-            }
+            codeSection.WriteData(w);
+            dataSection.WriteData(w);
+            importSection.WriteData(w);
         }
 
-        public void Write(params byte[][] args) {
-            foreach(byte[] bytes in args)
-                stream.Write(bytes, 0, bytes.Length);
-        }
-        private void Write(params DataDirectory[] args) {
+        private void WriteDataDirs(params DataDirectory[] args) {
             foreach (DataDirectory dd in args) {
-                Write(BitConverter.GetBytes(dd.address), BitConverter.GetBytes(dd.size));
+                w.Write(BitConverter.GetBytes(dd.address), BitConverter.GetBytes(dd.size));
             }
         }
-        private void Write(SectionHeader h) {
-            Write(
-                h.name,
-                BitConverter.GetBytes(h.virtualSize),
-                BitConverter.GetBytes(h.virtualAddress),
-                BitConverter.GetBytes(h.sizeOfRawData),
-                BitConverter.GetBytes(h.pointerToRawData),
-                BitConverter.GetBytes(SectionHeader.pointerToRelocations),
-                BitConverter.GetBytes(SectionHeader.pointerToLinenumbers),
-                BitConverter.GetBytes(SectionHeader.numberOfRelocations),
-                BitConverter.GetBytes(SectionHeader.numberOfLinenumbers),
-                BitConverter.GetBytes(h.characteristics)
-            );
-        }
-
-        class SectionHeader
-        {
-            public SectionHeader(String name, UInt32 characteristics)
-            {
-                if (name.Length >= 8) throw new Exception("section name must be at most 8 characters");
-
-                for (int i = 0; i < name.Length; i++)
-                    this.name[i] = (byte)name[i];
-
-                this.characteristics = characteristics;
-            }
-
-            public byte[] name = new byte[8];               /*0x00*/
-            public Int32 virtualSize;                       /*0x08*/
-            public Int32 virtualAddress;                    /*0x0C*/
-            public Int32 sizeOfRawData;                     /*0x10*/
-            public Int32 pointerToRawData;                  /*0x14*/
-            public const Int32 pointerToRelocations = 0;    /*0x18*/
-            public const Int32 pointerToLinenumbers = 0;    /*0x1C*/
-            public const Int16 numberOfRelocations = 0;     /*0x20*/
-            public const Int16 numberOfLinenumbers = 0;     /*0x22*/
-            public UInt32 characteristics;                  /*0x24*/
-            /*0x28 - size of section header*/
-        }
-        class Section
-        {
-            public SectionHeader header;
-            public byte[] data;
-
-            public Section(String name, UInt32 characteristics, byte[] data) {
-                header = new SectionHeader(name, characteristics);
-                if(data != null)
-                    SetData(data);
-            }
-
-            public void SetData(byte[] bytes) {
-                if (bytes == null || bytes.Length == 0) throw new Exception("length of data must be > 0");
-
-                Int32 alignedSize = ((Int32)((float)bytes.Length / PE.fileAlignment) + 1) * PE.fileAlignment;
-                data = bytes;
-                header.sizeOfRawData = alignedSize;
-                header.virtualSize = bytes.Length;
-            }
-        }
+       
 
         class DataDirectory
         {
@@ -319,6 +246,14 @@ namespace pe
             }
             public Int32 address;
             public Int32 size;
+        }
+
+
+        public static int AlignSection(int val) {
+            return ((Int32)((float)val / PE.sectionAlignment) + 1) * PE.sectionAlignment;
+        }
+        public static int AlignFile(int val) {
+            return ((Int32)((float)val / PE.fileAlignment) + 1) * PE.fileAlignment;
         }
     }
 

@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace assembler
+namespace lang.assembler
 {
     abstract class Reg {
         public byte idx = 0;

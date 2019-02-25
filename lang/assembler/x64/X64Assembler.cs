@@ -1,13 +1,9 @@
-﻿using pe;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace assembler
+namespace lang.assembler
 {
-    class X64Assembler {
+    class X64Assembler : Assembler {
         public static Reg32 RAX = new Reg32(0);
         public static Reg32 RCX = new Reg32(1);
         public static Reg32 RDX = new Reg32(2);
@@ -24,39 +20,5 @@ namespace assembler
         public static Reg64 R13 = new Reg64(5);
         public static Reg64 R14 = new Reg64(6);
         public static Reg64 R15 = new Reg64(7);
-
-
-
-        private List<Instruction> ins = new List<Instruction>();
-        public int Size {
-            get {
-                int s = 0;
-                foreach(Instruction i in ins) {
-                    s += i.size;
-                }
-                return s;
-            }
-        }
-
-        public override String ToString() {
-            String o = "";
-            foreach (Instruction i in ins) {
-                o += i.ToString() + "\r\n";
-            }
-            return o;
-        }
-
-        public void Write(ByteStream s) {
-            foreach(Instruction i in ins) {
-                i.Write(s);
-            }
-        }
-
-        public static X64Assembler operator +(X64Assembler left, Instruction right) {
-            left.ins.Add(right);
-            return left;
-        }
     }
-
-
 }

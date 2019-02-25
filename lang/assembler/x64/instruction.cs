@@ -1,45 +1,11 @@
-﻿using System;
+﻿using lang.assembler;
+using lang.utils;
+using System;
 using System.IO;
 
-namespace assembler
+namespace lang.assembler
 {
-    class ByteStream {
-        public MemoryStream stream = new MemoryStream();
 
-        public void Write(params byte[] bytes) {
-            stream.Write(bytes, 0, bytes.Length);
-        }
-        public byte[] GetBytes() {
-            return stream.ToArray();
-        }
-    }
-
-    abstract class Instruction {
-        protected Instruction(int size) {
-            this.size = size;
-        }
-
-        public int size;
-        public abstract void Write(ByteStream stream);
-
-
-        protected static string Format(byte[] bytes, String i, String o1 = "", String o2 = "")
-        {
-            String s = "";
-            foreach (byte b in bytes) {
-                s += String.Format("0x{0:X2} ", b);
-            }
-            return String.Format("{0,-40}{1,-5}{2,-5}{3}", s, i, o1, o2);
-        }
-        protected static string Hex(int val)
-        {
-            return String.Format("0x{0:X2}", val);
-        }
-        protected static string Addr(AddressReference a)
-        {
-            return String.Format("<0x{0:X}>", a.address);
-        }
-    }
 
     class Push : Instruction {
         private Reg reg;
@@ -51,7 +17,7 @@ namespace assembler
             this.reg = reg;
         }
 
-        public override void Write(ByteStream stream) {
+        public override void Write(Writer stream) {
             if (this.reg is Reg32)
                 stream.Write((byte)(0x50 + reg));
             else
@@ -59,7 +25,7 @@ namespace assembler
         }
 
         public override string ToString() {
-            ByteStream s = new ByteStream();
+            Writer s = new Writer();
             Write(s);
             return Format(s.GetBytes(), "push", reg);
         }
@@ -85,7 +51,7 @@ namespace assembler
             this.srcAddr = addr;
         }
 
-        public override void Write(ByteStream stream) {
+        public override void Write(Writer stream) {
             if (srcReg != null) {
                 byte first;
                 if (dst is Reg64) {
@@ -115,7 +81,7 @@ namespace assembler
         }
 
         public override string ToString() {
-            ByteStream s = new ByteStream();
+            Writer s = new Writer();
             Write(s);
             if(srcReg != null)
                 return Format(s.GetBytes(), "mov", dst, srcReg);
@@ -133,12 +99,12 @@ namespace assembler
             this.addr = addr;
         }
 
-        public override void Write(ByteStream stream) {
+        public override void Write(Writer stream) {
             var tmp = BitConverter.GetBytes(addr.address);
             stream.Write(0xFF, 0x14, 0x25, tmp[0], tmp[1], tmp[2], tmp[3]);
         }
         public override string ToString() {
-            ByteStream s = new ByteStream();
+            Writer s = new Writer();
             Write(s);
             return Format(s.GetBytes(), "call", Addr(addr));
         }
@@ -148,11 +114,11 @@ namespace assembler
     {
         public Leave() : base(1) { }
 
-        public override void Write(ByteStream stream) {
+        public override void Write(Writer stream) {
             stream.Write(0xC9);
         }
         public override string ToString() {
-            ByteStream s = new ByteStream();
+            Writer s = new Writer();
             Write(s);
             return Format(s.GetBytes(), "leave");
         }
