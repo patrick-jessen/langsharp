@@ -4,6 +4,8 @@ using System.Collections.Generic;
 namespace lang.assembler
 {
     class X64Assembler : Assembler {
+        // Register encodings
+        // https://wiki.osdev.org/X86-64_Instruction_Encoding#Registers
         public static Reg32 RAX = new Reg32(0);
         public static Reg32 RCX = new Reg32(1);
         public static Reg32 RDX = new Reg32(2);

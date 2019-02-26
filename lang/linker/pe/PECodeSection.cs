@@ -13,7 +13,7 @@ namespace lang.linker.pe
         public PECodeSection(PE pe, List<CodeBlock> blocks) {
             this.blocks = blocks;
             foreach(CodeBlock b in blocks) {
-                b.addr.Resolve((int)(PE.imageBase + PE.baseOfCode + size));
+                b.addr.Resolve((int)PE.imageBase, PE.baseOfCode + size);
                 size += b.assembler.Size;
             }
 
@@ -21,6 +21,7 @@ namespace lang.linker.pe
         }
 
         public override void WriteData(Writer w) {
+            w.currAddress = PE.baseOfCode;
             foreach (CodeBlock b in blocks) {
                 foreach (Instruction i in b.assembler.instructions)
                     i.Write(w);

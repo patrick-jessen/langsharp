@@ -11,7 +11,10 @@ namespace lang.assembler
             get {
                 int s = 0;
                 foreach (Instruction i in instructions)
+                {
+                    if (i.size < 0) throw new Exception("Instruction size is not set for " + i.GetType().Name);
                     s += i.size;
+                }
                 return s;
             }
         }

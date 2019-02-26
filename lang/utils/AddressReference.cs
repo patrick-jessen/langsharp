@@ -6,9 +6,11 @@ namespace lang.utils
     {
         public String name;
         public int address = -1;
+        public int imageAddress = -1;
 
-        public void Resolve(int addr) {
-            this.address = addr;
+        public void Resolve(int baseAddr, int imageAddr) {
+            this.address = baseAddr + imageAddr;
+            this.imageAddress = imageAddr;
         }
     }
 }

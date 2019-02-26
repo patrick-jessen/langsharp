@@ -23,23 +23,20 @@ namespace lang
                 new Mov     (RBP, RSP),
                 new Sub     (RSP, 0x20),
 
-                //new Mov     (RCX, 0),
-                //new Mov     (RDX, p.data.String("CAPTION")),
-                //new Mov     (R8,  p.data.String("This is a text")),
-                //new Mov     (R9,  0),
-                //new Call    (p.import.Import("MessageBoxA", "user32.DLL")),
-                new Call    (testFn.addr),
-                //new Mov     (RCX, 0),
-                //new Call    (p.import.Import("ExitProcess", "kernel32.dll")),
+                new Mov     (RCX, 0),
+                new Mov     (RDX, p.data.String("CAPTION")),
+                new Mov     (R8,  p.data.String("This is a text")),
+                new Mov     (R9,  0),
+                new Call    (p.import.Import("MessageBoxA", "user32.DLL"), false),
+
+                new Call(testFn.addr, true),
+
+                new Mov     (RCX, 0),
+                new Call    (p.import.Import("ExitProcess", "kernel32.dll"), false),
 
                 new Add     (RSP, 0x20),
                 new Pop     (RBP),
-                new Ret     (),
-                new NOP(),
-                new NOP(),
-                new NOP(),
-                new NOP(),
-                new NOP()
+                new Retn     ()
             );
 
             testFn.assembler.Add(
@@ -48,13 +45,13 @@ namespace lang
                 new Sub(RSP, 0x20),
 
                 new Mov(RCX, p.data.String("Hello")),
-                new Call(p.import.Import("printf", "msvcrt.dll")),
-                new NOP(),
+                new Call(p.import.Import("printf", "msvcrt.dll"), false),
+
 
                 new Add(RSP, 0x20),
 
                 new Pop(RBP),
-                new Ret()
+                new Retn()
             );
 
             Console.WriteLine("main:");

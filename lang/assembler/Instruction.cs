@@ -9,18 +9,14 @@ namespace lang.assembler
 {
     abstract class Instruction
     {
-        public int size;
+        public int size = -1;
 
-        protected Instruction(int size) {
-            this.size = size;
-        }
-
-        protected static string Format(byte[] bytes, String i, String o1 = "", String o2 = "") {
+        protected string Format(byte[] bytes, String i, String o1 = "", String o2 = "") {
             String s = "";
             foreach (byte b in bytes) {
                 s += String.Format("0x{0:X2} ", b);
             }
-            return String.Format("{0,-40}{1,-5}{2,-5}{3}", s, i, o1, o2);
+            return String.Format("{0,-40}{1,-5}{2,-5}{3}{4,5} bytes", s, i, o1, o2, size);
         }
         protected static string Hex(int val) {
             return String.Format("0x{0:X2}", val);
@@ -29,6 +25,6 @@ namespace lang.assembler
             return String.Format("<0x{0:X}>", a.address);
         }
 
-        public abstract void Write(Writer stream);
+        public abstract void Write(Writer w);
     }
 }
