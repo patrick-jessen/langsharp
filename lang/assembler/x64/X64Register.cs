@@ -2,13 +2,17 @@
 
 namespace lang.assembler
 {
-    class X64Reg : Reg {
-        public X64Reg(byte idx) {
+    class X64Reg : Reg
+    {
+        public X64Reg(byte idx)
+        {
             this.idx = idx;
         }
 
-        public override string ToString() {
-            switch (idx) {
+        public override string ToString()
+        {
+            switch (idx)
+            {
                 case 0: return "rax";
                 case 1: return "rcx";
                 case 2: return "rdx";
@@ -21,13 +25,17 @@ namespace lang.assembler
             }
         }
     }
-    class X64RegExt : Reg {
-        public X64RegExt(byte idx) {
+    class X64RegExt : Reg
+    {
+        public X64RegExt(byte idx)
+        {
             this.idx = idx;
         }
 
-        public override string ToString() {
-            switch (idx) {
+        public override string ToString()
+        {
+            switch (idx)
+            {
                 case 0: return "r8";
                 case 1: return "r9";
                 case 2: return "r10";

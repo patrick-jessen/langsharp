@@ -9,11 +9,11 @@ namespace lang.assembler
 {
     abstract class Instruction
     {
-        protected string Format(String opcode, Operand op1 = null, Operand op2 = null) {
+        protected string Format(String opcode, Operand op1 = null, Operand op2 = null)
+        {
             String s = "";
-            foreach (byte b in Bytes(0)) {
+            foreach (byte b in Bytes(0))
                 s += String.Format("0x{0:X2} ", b);
-            }
             return String.Format("{0,-50}|{1,-5}{2,-5}{3}", s, opcode, op1, op2);
         }
 
