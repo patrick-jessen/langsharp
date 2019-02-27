@@ -4,13 +4,19 @@ namespace lang.utils
 {
     public class AddressReference
     {
+        public enum Type { Code, Data, Import }
+        public Type type;
         public String name;
-        public int address = -1;
-        public int imageAddress = -1;
+        public long address = -1;
 
-        public void Resolve(int baseAddr, int imageAddr) {
-            this.address = baseAddr + imageAddr;
-            this.imageAddress = imageAddr;
+        public AddressReference(Type t)
+        {
+            this.type = t;
+        }
+
+        public void Resolve(long addr)
+        {
+            this.address = addr;
         }
     }
 }

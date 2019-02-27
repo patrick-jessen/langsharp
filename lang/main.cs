@@ -21,22 +21,22 @@ namespace lang
             mainFn.assembler.Add(
                 new Push    (RBP),
                 new Mov     (RBP, RSP),
-                new Sub     (RSP, 0x20),
+                new Sub     (RSP, (byte)0x20),
 
-                new Mov     (RCX, 0),
+                new Xor     (RCX, RCX),
                 new Mov     (RDX, p.data.String("CAPTION")),
                 new Mov     (R8,  p.data.String("This is a text")),
-                new Mov     (R9,  0),
-                new Call    (p.import.Import("MessageBoxA", "user32.DLL"), false),
+                new Xor     (R9,  R9),
+                new Call    (p.import.Import("MessageBoxA", "user32.DLL")),
 
-                new Call(testFn.addr, true),
+                new Call    (testFn.addr),
 
-                new Mov     (RCX, 0),
-                new Call    (p.import.Import("ExitProcess", "kernel32.dll"), false),
+                new Xor     (RCX, RCX),
+                new Call    (p.import.Import("ExitProcess", "kernel32.dll")),
 
-                new Add     (RSP, 0x20),
+                new Add     (RSP, (byte)0x20),
                 new Pop     (RBP),
-                new Retn     ()
+                new Retn    ()
             );
 
             testFn.assembler.Add(
@@ -45,11 +45,9 @@ namespace lang
                 new Sub(RSP, 0x20),
 
                 new Mov(RCX, p.data.String("Hello")),
-                new Call(p.import.Import("printf", "msvcrt.dll"), false),
-
+                new Call(p.import.Import("printf", "msvcrt.dll")),
 
                 new Add(RSP, 0x20),
-
                 new Pop(RBP),
                 new Retn()
             );

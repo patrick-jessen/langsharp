@@ -5,7 +5,7 @@ namespace lang.utils
     public class Writer
     {
         public MemoryStream stream = new MemoryStream();
-        public int currAddress;
+        public long currAddress;
 
         public void Write(params byte[] bytes) {
             stream.Write(bytes, 0, bytes.Length);

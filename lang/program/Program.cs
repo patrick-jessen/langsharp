@@ -13,6 +13,6 @@ namespace lang.program
 
     class CodeBlock {
         public Assembler assembler = new X64Assembler();
-        public AddressReference addr = new AddressReference();
+        public AddressReference addr = new AddressReference(AddressReference.Type.Code);
     }
 }

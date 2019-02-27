@@ -61,7 +61,7 @@
     <Compile Include="linker\pe\PE.cs" />
     <Compile Include="program\Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="assembler\x64\Reg.cs" />
+    <Compile Include="assembler\x64\X64Register.cs" />
     <Compile Include="utils\Writer.cs" />
   </ItemGroup>
   <ItemGroup>

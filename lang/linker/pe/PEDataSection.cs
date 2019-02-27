@@ -16,7 +16,7 @@ namespace lang.linker.pe
             int rawAddr = codeHeader.NextRawAddress();
 
             foreach (DataItem i in dm.itemList) {
-                i.addr.Resolve((int)PE.imageBase, virAddr + size);
+                i.addr.Resolve(PE.imageBase + virAddr + size);
                 size += i.Size;
             }
 

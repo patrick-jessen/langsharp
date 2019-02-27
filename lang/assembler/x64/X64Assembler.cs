@@ -6,21 +6,21 @@ namespace lang.assembler
     class X64Assembler : Assembler {
         // Register encodings
         // https://wiki.osdev.org/X86-64_Instruction_Encoding#Registers
-        public static Reg32 RAX = new Reg32(0);
-        public static Reg32 RCX = new Reg32(1);
-        public static Reg32 RDX = new Reg32(2);
-        public static Reg32 RBX = new Reg32(3);
-        public static Reg32 RSP = new Reg32(4);
-        public static Reg32 RBP = new Reg32(5);
-        public static Reg32 RSI = new Reg32(6);
-        public static Reg32 RDI = new Reg32(7);
-        public static Reg64 R8  = new Reg64(0);
-        public static Reg64 R9  = new Reg64(1);
-        public static Reg64 R10 = new Reg64(2);
-        public static Reg64 R11 = new Reg64(3);
-        public static Reg64 R12 = new Reg64(4);
-        public static Reg64 R13 = new Reg64(5);
-        public static Reg64 R14 = new Reg64(6);
-        public static Reg64 R15 = new Reg64(7);
+        public static X64Reg RAX = new X64Reg(0);
+        public static X64Reg RCX = new X64Reg(1);
+        public static X64Reg RDX = new X64Reg(2);
+        public static X64Reg RBX = new X64Reg(3);
+        public static X64Reg RSP = new X64Reg(4);
+        public static X64Reg RBP = new X64Reg(5);
+        public static X64Reg RSI = new X64Reg(6);
+        public static X64Reg RDI = new X64Reg(7);
+        public static X64RegExt R8  = new X64RegExt(0);
+        public static X64RegExt R9  = new X64RegExt(1);
+        public static X64RegExt R10 = new X64RegExt(2);
+        public static X64RegExt R11 = new X64RegExt(3);
+        public static X64RegExt R12 = new X64RegExt(4);
+        public static X64RegExt R13 = new X64RegExt(5);
+        public static X64RegExt R14 = new X64RegExt(6);
+        public static X64RegExt R15 = new X64RegExt(7);
     }
 }

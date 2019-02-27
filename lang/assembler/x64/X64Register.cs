@@ -2,17 +2,8 @@
 
 namespace lang.assembler
 {
-    abstract class Reg {
-        public byte idx = 0;
-        public static implicit operator byte(Reg r) {
-            return r.idx;
-        }
-        public static implicit operator String(Reg r) {
-            return r.ToString();
-        }
-    }
-    class Reg32 : Reg {
-        public Reg32(byte idx) {
+    class X64Reg : Reg {
+        public X64Reg(byte idx) {
             this.idx = idx;
         }
 
@@ -30,8 +21,8 @@ namespace lang.assembler
             }
         }
     }
-    class Reg64 : Reg {
-        public Reg64(byte idx) {
+    class X64RegExt : Reg {
+        public X64RegExt(byte idx) {
             this.idx = idx;
         }
 

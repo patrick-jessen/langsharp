@@ -92,7 +92,7 @@ namespace lang.linker.pe
                     entryOffset += imp.addressTables[i].Size();
 
                 importAddressTableRVA = imp.baseOffset + imp.addressTablesOffset + entryOffset;
-                this.addr.Resolve((int)PE.imageBase, importAddressTableRVA);
+                this.addr.Resolve(PE.imageBase + importAddressTableRVA);
 
                 entryOffset = 0;
                 for (int i = 0; i < index; i++)

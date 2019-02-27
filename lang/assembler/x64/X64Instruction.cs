@@ -1,6 +1,7 @@
 ﻿using lang.assembler;
 using lang.utils;
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace lang.assembler
@@ -13,8 +14,8 @@ namespace lang.assembler
         // |=REX=======|=Opcode====|=ModR/M====|=SIB=======|=Displacement=====|=Immediate========|
         // | 0-1 bytes | 1-3 bytes | 0-1 bytes | 0-1 bytes | 0,1,2 or 4 bytes | 0,1,2 or 4 bytes |
 
-        // REX is an optional prefix to opcodes (1 byte)
-        protected byte[] REX(byte W, byte R, byte X, byte B)
+        // REX is an optional prefix to opcodes
+        protected byte REX(byte W, byte R, byte X, byte B)
         {
             // W = 64bit size
             // R = ModRM.reg extension
@@ -26,25 +27,14 @@ namespace lang.assembler
             rex |= (byte)((R & 1) << 2);
             rex |= (byte)((X & 1) << 1);
             rex |= (byte)(B & 1);
-            return new byte[] { rex };
+            return rex;
         }
-        // 1 byte opcode
-        protected byte[] Opcode(byte po)
-        {
-            return new byte[] { po };
-        }
-        // 2 byte opcode
-        protected byte[] Opcode2(byte po)
-        {
-            return new byte[] { 0x0F, po };
-        }
-        // 3 byte opcode
-        protected byte[] OpCode3(byte po, byte so)
-        {
-            return new byte[] { 0x0F, po, so };
-        }
-        // ModRM encodes operands (1 byte)
-        protected byte[] ModRM(byte mod, byte reg, byte rm)
+
+        // Indicates a two or three byte opcode
+        protected const byte OpcodeExt = 0x0F;
+
+        // ModRM encodes operands
+        protected byte ModRM(byte mod, byte reg, byte rm)
         {
             // mod (note: combines with rm):
             // 00 = address
@@ -64,10 +54,11 @@ namespace lang.assembler
             //   SIB follows
             // mod=00 && rm==101:
             //   Relative to instruction ptr. 32bit offset follows
-            return new byte[] { (byte)((mod & 3) << 6 | (reg & 7) << 3 | rm & 7) };
+            return (byte)((mod & 3) << 6 | (reg & 7) << 3 | rm & 7);
         }
+
         // SIB describes an address offset
-        protected byte[] SIB(byte scale, byte index, byte _base)
+        protected byte SIB(byte scale, byte index, byte _base)
         {
             // [base+index*scale]
 
@@ -82,300 +73,324 @@ namespace lang.assembler
 
             // base (can be combined with REX.B):
             // register no. of base for 
-            return new byte[] { (byte)((scale & 3) << 6 | (index & 7) << 3 | _base & 7) };
+            return (byte)((scale & 3) << 6 | (index & 7) << 3 | _base & 7);
+        }
+        
+        // Returns 0 or 1 depending on whether register is x64 extended (r8-r15)
+        protected byte IsExt(Reg r)
+        {
+            if (r is X64RegExt) return 1;
+            return 0;
+        }
+    }
+
+    internal class InstructionWriter
+    {
+        private List<byte> bytes = new List<byte>();
+
+        public InstructionWriter Bytes(params byte[] bytes)
+        {
+            foreach(byte b in bytes)
+                this.bytes.Add(b);
+            return this;
+        }
+        public InstructionWriter Bytes(params byte[][] bytes)
+        {
+            foreach (byte[] b in bytes)
+                Bytes(b);
+            return this;
+        }
+
+        public static implicit operator byte[](InstructionWriter w)
+        {
+            return w.bytes.ToArray();
         }
     }
 
     class Push : X64Instruction
     {
-        private Reg srcReg;
-        private int srcVal;
+        enum Variant { r64, imm8, imm32 };
+        private Variant variant;
+        private Operand src;
 
-        public Push(Reg reg)
+        public Push(Reg src)
         {
-            this.srcReg = reg;
-            this.size = 1;
-            if (reg is Reg64)
-                this.size = 2;
+            this.variant = Variant.r64;
+            this.src = new Operand(src);
         }
-        public Push(int val)
+        public Push(byte src)
         {
-            this.srcVal = val;
-            if (Math.Abs(val) < Byte.MaxValue / 2)
-                this.size = 2;
-            else if (Math.Abs(val) < int.MaxValue)
-                this.size = 5;
-            else throw new Exception("immediate push value must fit in a DWORD");
+            this.variant = Variant.imm8;
+            this.src = new Operand(src);
+        }
+        public Push(int src)
+        {
+            this.variant = Variant.imm32;
+            this.src = new Operand(src);
         }
 
-
-        public override void Write(Writer w)
+        public override byte[] Bytes(long addr)
         {
-            if(this.srcReg == null)
+            var w = new InstructionWriter();
+            switch(variant)
             {
-                if (this.size == 2)
-                    w.Write(
-                        Opcode(0x6A),
-                        new byte[] { (byte)this.srcVal }
-                    );
-                else
-                    w.Write(
-                        Opcode(0x68),
-                        BitConverter.GetBytes(this.srcVal)
-                    );
+                case Variant.imm8:  return w.Bytes(0x6A, src.Byte);
+                case Variant.imm32: return w.Bytes(0x68).Bytes(src.Dword);
+                case Variant.r64:
+                    if (src.Reg is X64RegExt)
+                        return w.Bytes(REX(0, 0, 0, 1), (byte)(0x50 + src.Reg));
+                    else
+                        return w.Bytes((byte)(0x50 + src.Reg));
             }
-            else if (this.srcReg is Reg32)
-            {
-                w.Write(
-                    Opcode((byte)(0x50 + srcReg))
-                );
-            }
-            else
-            {
-                w.Write(
-                    REX(0, 0, 0, 1),
-                    Opcode((byte)(0x50 + srcReg))
-                );
-            }
+            throw new Exception("Invalid variant");
         }
 
         public override string ToString()
         {
-            Writer s = new Writer();
-            Write(s);
-            return Format(s.GetBytes(), "push", srcReg);
+            return Format("push", src);
         }
     }
     class Pop : X64Instruction
     {
-        private Reg dst;
+        enum Variant { r64 };
+        private Variant variant;
+        private Operand dst;
 
-        public Pop(Reg reg)
-        { 
-            this.dst = reg;
-            this.size = 1;
-            if (dst is Reg64)
-                this.size = 2;
+        public Pop(Reg dst)
+        {
+            this.variant = Variant.r64;
+            this.dst = new Operand(dst);
         }
 
-        public override void Write(Writer w)
+        public override byte[] Bytes(long addr)
         {
-            if (this.dst is Reg32)
+            var w = new InstructionWriter();
+            switch(variant)
             {
-                w.Write(
-                    Opcode((byte)(0x58 + dst))
-                );
+                case Variant.r64:
+                    if (dst.Reg is X64RegExt)
+                        return w.Bytes(REX(0, 0, 0, 1), (byte)(0x58 + dst.Reg));
+                    else
+                        return w.Bytes((byte)(0x58 + dst.Reg));
             }
-            else
-            {
-                w.Write(
-                    REX(0, 0, 0, 1),
-                    Opcode((byte)(0x58 + dst))
-                );
-            }
+            throw new Exception("Invalid variant");
         }
 
         public override string ToString()
         {
-            Writer s = new Writer();
-            Write(s);
-            return Format(s.GetBytes(), "pop", dst);
+            return Format("pop", dst);
         }
     }
     class Mov : X64Instruction
     {
-        private Reg dst;
-        private Reg srcReg;
-        private int srcVal;
-        private AddressReference srcAddr;
+        enum Variant { r64, imm32, imm64 };
+        private Variant variant;
+        private Operand dst;
+        private Operand src;
 
-        public Mov(Reg dst, Reg src) {
-            this.dst = dst;
-            this.srcReg = src;
-            this.size = 3;
+        public Mov(Reg dst, Reg src)
+        {
+            this.variant = Variant.r64;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
         }
-        public Mov(Reg dst, int val) {
-            this.dst = dst;
-            this.srcVal = val;
-            this.size = 7;
+        public Mov(Reg dst, int src)
+        {
+            this.variant = Variant.imm32;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
         }
-        public Mov(Reg dst, AddressReference addr) {
-            this.dst = dst;
-            this.srcAddr = addr;
-            this.size = 7;
+        public Mov(Reg dst, long src)
+        {
+            this.variant = Variant.imm64;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
+        }
+        public Mov(Reg dst, AddressReference src)
+        {
+            this.variant = Variant.imm64;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
         }
 
-        public override void Write(Writer w) {
-            byte dstExt = 0;
-            if (dst is Reg64) dstExt = 1;
-
-            if (srcReg != null) {
-                byte srcExt = 0;
-                if (srcReg is Reg64) srcExt = 1;
-
-                w.Write(
-                    REX(1, srcExt, 0, dstExt),
-                    Opcode(0x89),
-                    ModRM(11, srcReg, dst)
-                );
+        public override byte[] Bytes(long addr)
+        {
+            var w = new InstructionWriter();
+            switch (variant)
+            {
+                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0xC7, ModRM(11, 0, dst.Reg)).Bytes(src.Dword);
+                case Variant.imm64: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), (byte)(0xB8 + dst.Reg)).Bytes(src.Qword);
+                case Variant.r64:   return w.Bytes(REX(1, IsExt(src.Reg), 0, IsExt(dst.Reg)), 0x89, ModRM(11, src.Reg, dst.Reg));
             }
-            else {
-                int val = srcVal;
-                if (srcAddr != null) val = srcAddr.address;
-
-                w.Write(
-                    REX(1, 0, 0, dstExt),
-                    Opcode(0xC7),
-                    ModRM(11, 0, dst),
-                    BitConverter.GetBytes(val)
-                );
-            }
+            throw new Exception("Invalid variant");
         }
 
-        public override string ToString() {
-            Writer s = new Writer();
-            Write(s);
-            if(srcReg != null)
-                return Format(s.GetBytes(), "mov", dst, srcReg);
-            if (srcAddr != null)
-                return Format(s.GetBytes(), "mov", dst, Addr(srcAddr));
-            return Format(s.GetBytes(), "mov", dst, Hex(srcVal));
+        public override string ToString()
+        {
+            return Format("mov", dst, src);
         }
     }
     class Call : X64Instruction
     {
-        private AddressReference addr;
-        private bool near;
+        enum Variant { Near, Far };
+        private Variant variant;
+        private Operand addr;
 
-        public Call(AddressReference addr, bool near)
+        public Call(AddressReference addr)
         {
-            this.addr = addr;
-            this.near = near;
-
-            this.size = 5;
-            if (!near) this.size = 7;
-        }
-
-        public override void Write(Writer w)
-        {
-            if (near)
-                w.Write(
-                    Opcode(0xE8),
-                    BitConverter.GetBytes(addr.imageAddress - (w.currAddress + 5))
-                );
+            if (addr.type == AddressReference.Type.Code)
+                this.variant = Variant.Near;
+            else if (addr.type == AddressReference.Type.Import)
+                this.variant = Variant.Far;
             else
-                w.Write(
-                    Opcode(0xFF),
-                    ModRM(0, 2, 4),
-                    SIB(0, 4, 5),
-                    BitConverter.GetBytes(addr.address)
-                );
+                throw new Exception("Address must point to code or import");
+
+            this.addr = new Operand(addr);
+        }
+
+        public override byte[] Bytes(long addr)
+        {
+            var w = new InstructionWriter();
+            switch(variant)
+            {
+                case Variant.Near: return w.Bytes(0xE8).Bytes(BitConverter.GetBytes((int)(this.addr.Addr.address - addr - 5)));
+                case Variant.Far:  return w.Bytes(0xFF, ModRM(0, 2, 4), SIB(0, 4, 5)).Bytes(this.addr.Dword);
+            }
+            throw new Exception("Invalid variant");
         }
 
         public override string ToString()
         {
-            Writer s = new Writer();
-            Write(s);
-            return Format(s.GetBytes(), "call", Addr(addr));
+            return Format("call", addr);
         }
     }
-
-    class Leave : X64Instruction
+    class Sub : X64Instruction
     {
-        public Leave() {
-            this.size = 1;
+        enum Variant { r64, imm32, imm8 };
+        private Variant variant;
+        private Operand dst;
+        private Operand src;
+
+        public Sub(Reg dst, Reg src)
+        {
+            this.variant = Variant.r64;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
+        }
+        public Sub(Reg dst, int src)
+        {
+            this.variant = Variant.imm32;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
+        }
+        public Sub(Reg dst, byte src)
+        {
+            this.variant = Variant.imm8;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
         }
 
-        public override void Write(Writer w)
+        public override byte[] Bytes(long addr)
         {
-            w.Write(Opcode(0xC9));
+            var w = new InstructionWriter();
+            switch(variant)
+            {
+                case Variant.r64:   return w.Bytes(REX(1, IsExt(src.Reg), 0, IsExt(dst.Reg)), 0x2B, ModRM(11, src.Reg, dst.Reg));
+                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0x81, ModRM(11, 5, dst.Reg)).Bytes(src.Dword);
+                case Variant.imm8:  return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0x83, ModRM(11, 5, dst.Reg), src.Byte);
+            }
+            throw new Exception("Invalid variant");
         }
+
         public override string ToString()
         {
-            Writer s = new Writer();
-            Write(s);
-            return Format(s.GetBytes(), "leave");
+            return Format("sub", dst, src);
         }
     }
-
-    class Sub : X64Instruction {
-        private Reg dst;
-        private int srcVal;
-
-        public Sub(Reg reg, int val) {
-            this.dst = reg;
-            this.srcVal = val;
-            this.size = 7;
-        }
-
-        public override void Write(Writer w) {
-            byte dstExt = 0;
-            if (dst is Reg64) dstExt = 1;
-
-            w.Write(
-                REX(1, 0, 0, dstExt),
-                Opcode(0x81),
-                ModRM(3, 5, dst),
-                BitConverter.GetBytes(this.srcVal)
-            );
-        }
-
-        public override string ToString()
-        {
-            Writer s = new Writer();
-            Write(s);
-            return Format(s.GetBytes(), "sub", dst, Hex(srcVal));
-        }
-    }
-
     class Add : X64Instruction
     {
-        private Reg dst;
-        private int srcVal;
+        enum Variant { r64, imm32, imm8 };
+        private Variant variant;
+        private Operand dst;
+        private Operand src;
 
-        public Add(Reg reg, int val)
+        public Add(Reg dst, Reg src)
         {
-            this.dst = reg;
-            this.srcVal = val;
-            this.size = 7;
+            this.variant = Variant.r64;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
+        }
+        public Add(Reg dst, byte src)
+        {
+            this.variant = Variant.imm8;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
+        }
+        public Add(Reg dst, int src)
+        {
+            this.variant = Variant.imm32;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
         }
 
-        public override void Write(Writer w)
+        public override byte[] Bytes(long addr)
         {
-            byte dstExt = 0;
-            if (dst is Reg64) dstExt = 1;
-
-            w.Write(
-                REX(1, 0, 0, dstExt),
-                Opcode(0x81),
-                ModRM(3, 0, dst),
-                BitConverter.GetBytes(this.srcVal)
-            );
+            var w = new InstructionWriter();
+            switch(variant)
+            {
+                case Variant.r64:   return w.Bytes(REX(1, IsExt(src.Reg), 0, IsExt(dst.Reg)), 0x01, ModRM(11, src.Reg, dst.Reg));
+                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0x81, ModRM(11, 0, dst.Reg)).Bytes(src.Dword);
+                case Variant.imm8: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0x83, ModRM(11, 0, dst.Reg), src.Byte);
+            }
+            throw new Exception("Invalid variant");
         }
 
         public override string ToString()
         {
-            Writer s = new Writer();
-            Write(s);
-            return Format(s.GetBytes(), "add", dst, Hex(srcVal));
+            return Format("add", dst, src);
         }
     }
+    class Xor : X64Instruction
+    {
+        enum Variant { r64 };
+        private Variant variant;
+        private Operand dst;
+        private Operand src;
 
+        public Xor(Reg dst, Reg src)
+        {
+            this.variant = Variant.r64;
+            this.dst = new Operand(dst);
+            this.src = new Operand(src);
+        }
+
+        public override byte[] Bytes(long addr)
+        {
+            var w = new InstructionWriter();
+            switch(variant)
+            {
+                case Variant.r64: return w.Bytes(REX(1, IsExt(src.Reg), 0, IsExt(dst.Reg)), 0x31, ModRM(11, src.Reg, dst.Reg));
+            }
+            throw new Exception("Invalid variant");
+        }
+
+        public override string ToString()
+        {
+            return Format("xor", dst, src);
+        }
+    }
     class Retn : X64Instruction
     {
-        public Retn()
+        public override byte[] Bytes(long addr)
         {
-            this.size = 1;
+            return new byte[] { 0xC3 };
         }
-        public override void Write(Writer w)
-        {
-            w.Write(Opcode(0xC3));
-        }
+
         public override string ToString()
         {
-            return Format(new byte[] { 0xC3 }, "ret");
+            return Format("ret");
         }
     }
 
-    
+
 }

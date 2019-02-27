@@ -16,7 +16,7 @@ namespace lang.program
 
             ImportSymbol impSym;
             if (!impLib.symbols.TryGetValue(symbol, out impSym)) {
-                impSym = new ImportSymbol(symbol);
+                impSym = new ImportSymbol(impLib.name, symbol);
                 impLib.symbols.Add(symbol, impSym);
             }
 
@@ -37,11 +37,12 @@ namespace lang.program
     public class ImportSymbol
     {
         String name;
-        public AddressReference addr = new AddressReference();
+        public AddressReference addr = new AddressReference(AddressReference.Type.Import);
 
-        public ImportSymbol(String name)
+        public ImportSymbol(String lib, String name)
         {
             this.name = name;
+            addr.name = lib + "." + name;
         }
     }
 }
