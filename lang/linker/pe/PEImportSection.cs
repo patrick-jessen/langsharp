@@ -25,8 +25,6 @@ namespace lang.linker.pe
         private List<String> dllNames = new List<string>();
         private List<Name> names = new List<Name>();
 
-        private Dictionary<String, int> dlls = new Dictionary<string, int>();
-
         public PEImportSection(PE pe, ImportManager im) {
             PESectionHeader dataHeader = pe.dataSection.header;
             int virAddr = dataHeader.NextVirtualAddress();
@@ -44,23 +42,23 @@ namespace lang.linker.pe
 
         private void Import(String symbol, String dll, AddressReference ar)
         {
-            int descIdx;
-            if (!dlls.TryGetValue(dll, out descIdx))
+            int dllIdx = dllNames.IndexOf(dll);
+            if (dllIdx < 0)
             {
-                descIdx = directories.Count;
-                dlls[dll] = descIdx;
-
-                directories.Add(new Directory(ar));
-                lookupTables.Add(new Table());
-                addressTables.Add(new Table());
+                dllIdx = dllNames.Count;
                 dllNames.Add(dll);
             }
+
+            int dirIdx = directories.Count;
+            directories.Add(new Directory(dllIdx, ar));
+            lookupTables.Add(new Table());
+            addressTables.Add(new Table());
 
             Int64 nameIdx = (Int64)names.Count;
             names.Add(new Name(symbol));
 
-            lookupTables[descIdx].entries.Add(nameIdx);
-            addressTables[descIdx].entries.Add(nameIdx);
+            lookupTables[dirIdx].entries.Add(nameIdx);
+            addressTables[dirIdx].entries.Add(nameIdx);
         }
 
         private class Directory {
@@ -69,9 +67,12 @@ namespace lang.linker.pe
             Int32 forwarderChain;       // Not used
             Int32 nameRVA;              // RVA to null-terminated DLL string
             Int32 importAddressTableRVA;// Identical to importLookupTableRVA until the image is bound
-            public AddressReference addr; // Not part of PE
 
-            public Directory(AddressReference ar = null) {
+            public AddressReference addr; // Not part of PE
+            private int dllIndx;
+
+            public Directory(int dllIndx = -1, AddressReference ar = null) {
+                this.dllIndx = dllIndx;
                 this.addr = ar;
             }
 
@@ -95,7 +96,7 @@ namespace lang.linker.pe
                 this.addr.Resolve(PE.imageBase + importAddressTableRVA);
 
                 entryOffset = 0;
-                for (int i = 0; i < index; i++)
+                for (int i = 0; i < dllIndx; i++)
                     entryOffset += imp.dllNames[i].Length + 1; // 0-terminated string
 
                 nameRVA = imp.baseOffset + imp.dllNamesOffset + entryOffset;

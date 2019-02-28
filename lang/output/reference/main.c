@@ -1,10 +1,9 @@
 #include <stdio.h>
 
-void test() {
-	printf("Hello world");
-}
 
 int main() {
-	test();
-	return 111;
+	char buf[4];
+
+	fgets(buf, 4, stdin);
+	return 0;
 }

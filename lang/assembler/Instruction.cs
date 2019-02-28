@@ -9,15 +9,47 @@ namespace lang.assembler
 {
     abstract class Instruction
     {
-        protected string Format(String opcode, Operand op1 = null, Operand op2 = null)
+        protected abstract string Mnemonic();
+        protected Operand op1;
+        protected Operand op2;
+         
+        public virtual void Resolve(long addr) { }
+        public int Size() { return Bytes().Length; }
+
+        public abstract byte[] Bytes(long addr = 0);
+        public override string ToString()
         {
             String s = "";
             foreach (byte b in Bytes(0))
                 s += String.Format("0x{0:X2} ", b);
-            return String.Format("{0,-50}|{1,-5}{2,-5}{3}", s, opcode, op1, op2);
+            return String.Format("{0,-50}|{1,-5}{2,-5}{3}", s, Mnemonic(), op1, op2);
+        }
+    }
+
+    class Label : Instruction
+    {
+        public AddressReference addr = new AddressReference(AddressReference.Type.Code);
+
+        public Label(string name = "unnamed label")
+        {
+            addr.name = name;
         }
 
-        public abstract byte[] Bytes(long addr = 0);
+        public override byte[] Bytes(long addr)
+        {
+            return new byte[0];
+        }
+
+        protected override string Mnemonic() { return ""; }
+        public override void Resolve(long addr)
+        {
+            this.addr.Resolve(addr);
+        }
+
+        public override string ToString()
+        {
+            return addr.name + ":";
+        }
     }
 
     abstract class Reg

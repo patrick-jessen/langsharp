@@ -111,22 +111,21 @@ namespace lang.assembler
     {
         enum Variant { r64, imm8, imm32 };
         private Variant variant;
-        private Operand src;
 
         public Push(Reg src)
         {
-            this.variant = Variant.r64;
-            this.src = new Operand(src);
+            variant = Variant.r64;
+            op1 = new Operand(src);
         }
         public Push(byte src)
         {
-            this.variant = Variant.imm8;
-            this.src = new Operand(src);
+            variant = Variant.imm8;
+            op1 = new Operand(src);
         }
         public Push(int src)
         {
-            this.variant = Variant.imm32;
-            this.src = new Operand(src);
+            variant = Variant.imm32;
+            op1 = new Operand(src);
         }
 
         public override byte[] Bytes(long addr)
@@ -134,32 +133,28 @@ namespace lang.assembler
             var w = new InstructionWriter();
             switch(variant)
             {
-                case Variant.imm8:  return w.Bytes(0x6A, src.Byte);
-                case Variant.imm32: return w.Bytes(0x68).Bytes(src.Dword);
+                case Variant.imm8:  return w.Bytes(0x6A, op1.Byte);
+                case Variant.imm32: return w.Bytes(0x68).Bytes(op1.Dword);
                 case Variant.r64:
-                    if (src.Reg is X64RegExt)
-                        return w.Bytes(REX(0, 0, 0, 1), (byte)(0x50 + src.Reg));
+                    if (op1.Reg is X64RegExt)
+                        return w.Bytes(REX(0, 0, 0, 1), (byte)(0x50 + op1.Reg));
                     else
-                        return w.Bytes((byte)(0x50 + src.Reg));
+                        return w.Bytes((byte)(0x50 + op1.Reg));
             }
             throw new Exception("Invalid variant");
         }
 
-        public override string ToString()
-        {
-            return Format("push", src);
-        }
+        protected override string Mnemonic() { return "push"; }
     }
     class Pop : X64Instruction
     {
         enum Variant { r64 };
         private Variant variant;
-        private Operand dst;
 
         public Pop(Reg dst)
         {
-            this.variant = Variant.r64;
-            this.dst = new Operand(dst);
+            variant = Variant.r64;
+            op1 = new Operand(dst);
         }
 
         public override byte[] Bytes(long addr)
@@ -168,49 +163,44 @@ namespace lang.assembler
             switch(variant)
             {
                 case Variant.r64:
-                    if (dst.Reg is X64RegExt)
-                        return w.Bytes(REX(0, 0, 0, 1), (byte)(0x58 + dst.Reg));
+                    if (op1.Reg is X64RegExt)
+                        return w.Bytes(REX(0, 0, 0, 1), (byte)(0x58 + op1.Reg));
                     else
-                        return w.Bytes((byte)(0x58 + dst.Reg));
+                        return w.Bytes((byte)(0x58 + op1.Reg));
             }
             throw new Exception("Invalid variant");
         }
 
-        public override string ToString()
-        {
-            return Format("pop", dst);
-        }
+        protected override string Mnemonic() { return "pop"; }
     }
     class Mov : X64Instruction
     {
         enum Variant { r64, imm32, imm64 };
         private Variant variant;
-        private Operand dst;
-        private Operand src;
 
         public Mov(Reg dst, Reg src)
         {
-            this.variant = Variant.r64;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.r64;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
         public Mov(Reg dst, int src)
         {
-            this.variant = Variant.imm32;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.imm32;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
         public Mov(Reg dst, long src)
         {
-            this.variant = Variant.imm64;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.imm64;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
         public Mov(Reg dst, AddressReference src)
         {
-            this.variant = Variant.imm64;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.imm64;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
 
         public override byte[] Bytes(long addr)
@@ -218,34 +208,30 @@ namespace lang.assembler
             var w = new InstructionWriter();
             switch (variant)
             {
-                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0xC7, ModRM(11, 0, dst.Reg)).Bytes(src.Dword);
-                case Variant.imm64: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), (byte)(0xB8 + dst.Reg)).Bytes(src.Qword);
-                case Variant.r64:   return w.Bytes(REX(1, IsExt(src.Reg), 0, IsExt(dst.Reg)), 0x89, ModRM(11, src.Reg, dst.Reg));
+                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(op1.Reg)), 0xC7, ModRM(0b11, 0, op1.Reg)).Bytes(op2.Dword);
+                case Variant.imm64: return w.Bytes(REX(1, 0, 0, IsExt(op1.Reg)), (byte)(0xB8 + op1.Reg)).Bytes(op2.Qword);
+                case Variant.r64:   return w.Bytes(REX(1, IsExt(op2.Reg), 0, IsExt(op1.Reg)), 0x89, ModRM(0b11, op2.Reg, op1.Reg));
             }
             throw new Exception("Invalid variant");
         }
 
-        public override string ToString()
-        {
-            return Format("mov", dst, src);
-        }
+        protected override string Mnemonic() { return "mov"; }
     }
     class Call : X64Instruction
     {
         enum Variant { Near, Far };
         private Variant variant;
-        private Operand addr;
 
         public Call(AddressReference addr)
         {
             if (addr.type == AddressReference.Type.Code)
-                this.variant = Variant.Near;
+                variant = Variant.Near;
             else if (addr.type == AddressReference.Type.Import)
-                this.variant = Variant.Far;
+                variant = Variant.Far;
             else
                 throw new Exception("Address must point to code or import");
 
-            this.addr = new Operand(addr);
+            op1 = new Operand(addr);
         }
 
         public override byte[] Bytes(long addr)
@@ -253,41 +239,36 @@ namespace lang.assembler
             var w = new InstructionWriter();
             switch(variant)
             {
-                case Variant.Near: return w.Bytes(0xE8).Bytes(BitConverter.GetBytes((int)(this.addr.Addr.address - addr - 5)));
-                case Variant.Far:  return w.Bytes(0xFF, ModRM(0, 2, 4), SIB(0, 4, 5)).Bytes(this.addr.Dword);
+                case Variant.Near: return w.Bytes(0xE8).Bytes(BitConverter.GetBytes((int)(op1.Addr.address - addr - 5)));
+                case Variant.Far:  return w.Bytes(0xFF, ModRM(0, 2, 4), SIB(0, 4, 5)).Bytes(op1.Dword);
             }
             throw new Exception("Invalid variant");
         }
 
-        public override string ToString()
-        {
-            return Format("call", addr);
-        }
+        protected override string Mnemonic() { return "call"; }
     }
     class Sub : X64Instruction
     {
         enum Variant { r64, imm32, imm8 };
         private Variant variant;
-        private Operand dst;
-        private Operand src;
 
         public Sub(Reg dst, Reg src)
         {
-            this.variant = Variant.r64;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.r64;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
         public Sub(Reg dst, int src)
         {
-            this.variant = Variant.imm32;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.imm32;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
         public Sub(Reg dst, byte src)
         {
-            this.variant = Variant.imm8;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.imm8;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
 
         public override byte[] Bytes(long addr)
@@ -295,42 +276,37 @@ namespace lang.assembler
             var w = new InstructionWriter();
             switch(variant)
             {
-                case Variant.r64:   return w.Bytes(REX(1, IsExt(src.Reg), 0, IsExt(dst.Reg)), 0x2B, ModRM(11, src.Reg, dst.Reg));
-                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0x81, ModRM(11, 5, dst.Reg)).Bytes(src.Dword);
-                case Variant.imm8:  return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0x83, ModRM(11, 5, dst.Reg), src.Byte);
+                case Variant.r64:   return w.Bytes(REX(1, IsExt(op2.Reg), 0, IsExt(op1.Reg)), 0x2B, ModRM(0b11, op2.Reg, op1.Reg));
+                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(op1.Reg)), 0x81, ModRM(0b11, 5, op1.Reg)).Bytes(op2.Dword);
+                case Variant.imm8:  return w.Bytes(REX(1, 0, 0, IsExt(op1.Reg)), 0x83, ModRM(0b11, 5, op1.Reg), op2.Byte);
             }
             throw new Exception("Invalid variant");
         }
 
-        public override string ToString()
-        {
-            return Format("sub", dst, src);
-        }
+        protected override string Mnemonic() { return "sub"; }
     }
     class Add : X64Instruction
     {
         enum Variant { r64, imm32, imm8 };
         private Variant variant;
-        private Operand dst;
-        private Operand src;
 
         public Add(Reg dst, Reg src)
         {
-            this.variant = Variant.r64;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.r64;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
         public Add(Reg dst, byte src)
         {
-            this.variant = Variant.imm8;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.imm8;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
         public Add(Reg dst, int src)
         {
-            this.variant = Variant.imm32;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.imm32;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
 
         public override byte[] Bytes(long addr)
@@ -338,30 +314,25 @@ namespace lang.assembler
             var w = new InstructionWriter();
             switch(variant)
             {
-                case Variant.r64:   return w.Bytes(REX(1, IsExt(src.Reg), 0, IsExt(dst.Reg)), 0x01, ModRM(11, src.Reg, dst.Reg));
-                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0x81, ModRM(11, 0, dst.Reg)).Bytes(src.Dword);
-                case Variant.imm8: return w.Bytes(REX(1, 0, 0, IsExt(dst.Reg)), 0x83, ModRM(11, 0, dst.Reg), src.Byte);
+                case Variant.r64:   return w.Bytes(REX(1, IsExt(op2.Reg), 0, IsExt(op1.Reg)), 0x01, ModRM(0b11, op2.Reg, op1.Reg));
+                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(op1.Reg)), 0x81, ModRM(0b11, 0, op1.Reg)).Bytes(op2.Dword);
+                case Variant.imm8: return w.Bytes(REX(1, 0, 0, IsExt(op1.Reg)), 0x83, ModRM(0b11, 0, op1.Reg), op2.Byte);
             }
             throw new Exception("Invalid variant");
         }
 
-        public override string ToString()
-        {
-            return Format("add", dst, src);
-        }
+        protected override string Mnemonic() { return "add"; }
     }
     class Xor : X64Instruction
     {
         enum Variant { r64 };
         private Variant variant;
-        private Operand dst;
-        private Operand src;
-
+        
         public Xor(Reg dst, Reg src)
         {
-            this.variant = Variant.r64;
-            this.dst = new Operand(dst);
-            this.src = new Operand(src);
+            variant = Variant.r64;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
         }
 
         public override byte[] Bytes(long addr)
@@ -369,15 +340,12 @@ namespace lang.assembler
             var w = new InstructionWriter();
             switch(variant)
             {
-                case Variant.r64: return w.Bytes(REX(1, IsExt(src.Reg), 0, IsExt(dst.Reg)), 0x31, ModRM(11, src.Reg, dst.Reg));
+                case Variant.r64: return w.Bytes(REX(1, IsExt(op2.Reg), 0, IsExt(op1.Reg)), 0x31, ModRM(0b11, op2.Reg, op1.Reg));
             }
             throw new Exception("Invalid variant");
         }
 
-        public override string ToString()
-        {
-            return Format("xor", dst, src);
-        }
+        protected override string Mnemonic() { return "xor"; }
     }
     class Retn : X64Instruction
     {
@@ -386,11 +354,83 @@ namespace lang.assembler
             return new byte[] { 0xC3 };
         }
 
-        public override string ToString()
-        {
-            return Format("ret");
-        }
+        protected override string Mnemonic() { return "retn"; }
     }
+    class Cmp : X64Instruction
+    {
+        enum Variant { imm32 };
+        private Variant variant;
 
+        public Cmp(Reg dst, int src)
+        {
+            variant = Variant.imm32;
+            op1 = new Operand(dst);
+            op2 = new Operand(src);
+        }
 
+        public override byte[] Bytes(long addr = 0)
+        {
+            var w = new InstructionWriter();
+            switch(variant)
+            {
+                case Variant.imm32: return w.Bytes(REX(1, 0, 0, IsExt(op1.Reg)), 0x81, ModRM(0b11, 7, op1.Reg)).Bytes(op2.Dword);
+            }
+            throw new Exception("Invalid variant");
+        }
+
+        protected override string Mnemonic() { return "cmp"; }
+    }
+    class Jmp : X64Instruction
+    {
+        enum Variant { rel32 };
+        private Variant variant;
+
+        public Jmp(Label label)
+        {
+            variant = Variant.rel32;
+            op1 = new Operand(label.addr);
+        }
+
+        public override byte[] Bytes(long addr)
+        {
+            var w = new InstructionWriter();
+            switch(variant)
+            {
+                case Variant.rel32: return w.Bytes(0xE9).Bytes(BitConverter.GetBytes((int)(op1.Addr.address - addr - 5)));
+            }
+            throw new Exception("Invalid variant");
+        }
+
+        protected override string Mnemonic() { return "jmp"; }
+    }
+    class Jl : X64Instruction
+    {
+        public Jl(Label label)
+        {
+            op1 = new Operand(label.addr);
+        }
+
+        public override byte[] Bytes(long addr)
+        {
+            var w = new InstructionWriter();
+            return w.Bytes(OpcodeExt, 0x8C).Bytes(BitConverter.GetBytes((int)(op1.Addr.address - addr - 6)));
+        }
+
+        protected override string Mnemonic() { return "jl"; }
+    }
+    class Jg : X64Instruction
+    {
+        public Jg(Label label)
+        {
+            op1 = new Operand(label.addr);
+        }
+
+        public override byte[] Bytes(long addr)
+        {
+            var w = new InstructionWriter();
+            return w.Bytes(OpcodeExt, 0x8F).Bytes(BitConverter.GetBytes((int)(op1.Addr.address - addr - 6)));
+        }
+
+        protected override string Mnemonic() { return "jg"; }
+    }
 }

@@ -65,7 +65,7 @@ namespace lang.program
     }
 
     class CodeBlock {
-        public Assembler assembler = new X64Assembler();
+        public Assembler assembler = new Assembler();
         public AddressReference addr = new AddressReference(AddressReference.Type.Code);
 
         internal CodeBlock(string name)

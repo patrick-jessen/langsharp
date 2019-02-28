@@ -13,8 +13,9 @@ namespace lang.linker.pe
         public PECodeSection(PE pe, List<CodeBlock> blocks) {
             this.blocks = blocks;
             foreach(CodeBlock b in blocks) {
-                b.addr.Resolve(PE.imageBase + PE.baseOfCode + size);
-                size += b.assembler.Size;
+                long addr = PE.imageBase + PE.baseOfCode + size;
+                b.addr.Resolve(addr);
+                size += b.assembler.ResolveAndGetSize(addr);
             }
 
             this.header.Init(".text", size, PE.baseOfCode, pe.SizeOfHeaders, characteristics);

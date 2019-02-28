@@ -4,21 +4,21 @@ using System.Collections.Generic;
 
 namespace lang.assembler
 {
-    abstract class Assembler
+    class Assembler
     {
         public List<Instruction> instructions = new List<Instruction>();
 
-        public int Size
+        public int ResolveAndGetSize(long addr)
         {
-            get
+            int s = 0;
+            foreach (Instruction i in instructions)
             {
-                int s = 0;
-                foreach (Instruction i in instructions)
-                    s += i.Bytes().Length;
-                return s;
+                i.Resolve(addr + s);
+                s += i.Size();
             }
+            return s;
         }
-
+        
         public void Add(params Instruction[] instructions)
         {
             foreach(Instruction i in instructions)
