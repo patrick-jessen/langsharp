@@ -1,0 +1,3 @@
+﻿func main() {
+    call()
+}
