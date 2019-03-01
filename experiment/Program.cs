@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -46,8 +47,16 @@ namespace experiment
         
         static void Main()
         {
-            Parser parser = new Parser("../../src/main.l");
-            Console.WriteLine(parser.Parse());
+            try
+            {
+                Parser parser = new Parser("../../src/main.l");
+                Console.WriteLine(parser.Parse());
+            }
+            catch (ParserException e)
+            {
+                Console.WriteLine(e.Message);
+                Debug.Write("A");
+            }
 
             Console.ReadKey();
         }

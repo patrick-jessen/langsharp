@@ -1,3 +1,4 @@
 ﻿func main() {
-    call()
+	call()
+	return
 }

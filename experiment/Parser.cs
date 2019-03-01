@@ -9,9 +9,13 @@ namespace experiment
     class Parser
     {
         private Lexer lexer;
+        private Token prevToken;
+        private Token nextToken;
+
         public Parser(string fileName)
         {
             lexer = new Lexer(fileName);
+            nextToken = lexer.Lex();
         }
 
         public ASTFile Parse()
@@ -31,7 +35,7 @@ namespace experiment
         public ASTFunction ParseFunction()
         {
             ASTFunction func = new ASTFunction();
-            func.name = Consume(Token.Type.Identifier);
+            func.identifer = Consume(Token.Type.Identifier);
             Consume(Token.Type.ParentStart);
             Consume(Token.Type.ParentEnd);
             Consume(Token.Type.BraceStart);
@@ -42,28 +46,77 @@ namespace experiment
 
         public void ParseFunctionBody(ASTFunction fn)
         {
-            var t = Consume();
-            if(t.type == Token.Type.Identifier)
+            while(Peek().type != Token.Type.BraceEnd)
             {
-                var t2 = Consume();
-                if(t2.type == Token.Type.ParentStart)
+                var stmt = ParseStatement();
+                fn.body.Add(stmt);
+            }
+        }
+
+        private ASTStatement ParseStatement()
+        {
+            var t = Peek();
+            if (t.type == Token.Type.Identifier)
+            {
+                var ident = Consume();
+                var t2 = Consume(Token.Type.ParentStart);
+                Consume(Token.Type.ParentEnd);
+                var fnCall = new ASTFunctionCall();
+                fnCall.name = t;
+                return fnCall;
+            }
+            else if (t.type == Token.Type.Keyword)
+            {
+                switch (t.value)
                 {
-                    Consume(Token.Type.ParentEnd);
-                    var fnCall = new ASTFunctionCall();
-                    fnCall.name = t;
-                    fn.body.Add(fnCall);
+                    case "return":
+                        Consume();
+                        return new ASTReturn();
                 }
             }
+            throw new ParserException(t.start, "expected statement");
         }
 
         private Token Consume(Token.Type t)
         {
-            Token tok = Consume();
-            if (tok.type != t) throw new Exception("Expected something else");
-            return tok;
+            Token tok = Peek();
+            if (tok.type != t)
+                throw new ParserException(prevToken.end, String.Format("expected '{0}'", t));
+            return Consume();
         }
-        private Token Consume() { return lexer.Lex(); }
+        private Token Consume()
+        {
+            prevToken = nextToken;
+            nextToken = lexer.Lex();
+            return prevToken;
+        }
+        private Token Peek() { return nextToken; }
 
+        public static string Indent(int indent, string str)
+        {
+            string end = "";
+            if (str.EndsWith("\n"))
+            {
+                end = "\n";
+                str = str.TrimEnd('\n');
+            }
+            var indentStr = new String(' ', indent * 2);
+            var separator = "\n" + indentStr;
+            return indentStr + String.Join(separator, str.Split('\n')) + end;
+        }
+    }
+
+    class ParserException : Exception
+    {
+        public Location location;
+        public string message;
+
+        public ParserException(Location location, string message)
+        {
+            this.location = location;
+            this.message = message;
+        }
+        public override string Message => String.Format("{0} at {1}", message, location);
     }
 
     class ASTFile
@@ -74,40 +127,54 @@ namespace experiment
         {
             var fns = "";
             foreach (ASTFunction f in functions)
-                fns += f.ToString(2) + "\n";
+                fns += f.ToString() + "\n";
 
-            return String.Format("ASTFile: {{\n{0}}}", fns);
+            return String.Format("ASTFile: {{\n{0}}}", Parser.Indent(1, fns));
         }
     }
 
     class ASTFunction
     {
-        public Token name;
-        public List<Expression> body = new List<Expression>();
+        public Token identifer;
+        public List<ASTStatement> body = new List<ASTStatement>();
 
-        public string ToString(int indent)
+        public override string ToString()
         {
-            var n = new String(' ', indent + 2) + name + "\n";
-            var b = "";
-            foreach(Expression exp in body)
-                b += exp.ToString(indent+2) + "\n" + new String(' ', indent);
+            var i = Parser.Indent(1, String.Format("identifier: {0}", identifer.value));
 
-            return new string(' ', indent) + String.Format("ASTFunction: {{\n{0}{1}}}", n,b);
+            var b = "";
+            foreach (ASTStatement exp in body)
+                b += exp.ToString() + "\n";
+
+            b = Parser.Indent(1, String.Format("body: [\n{0}]", Parser.Indent(1, b)));
+            return String.Format("ASTFunction: {{\n{0}\n{1}\n}}", i, b);
         }
 
     }
 
-    interface Expression {
-        string ToString(int indent);
-    }
+    interface ASTNode { }
+    interface ASTStatement : ASTNode { }
+    interface Expression : ASTNode { }
 
-    class ASTFunctionCall : Expression
+    class ASTFunctionCall : ASTStatement, Expression
     {
         public Token name;
-        public string ToString(int indent)
+        public override string ToString()
         {
-            var n = new String(' ', indent + 2) + name + "\n" + new String(' ', indent);
-            return new string(' ', indent) + String.Format("ASTFunctionCall: {{\n{0}}}", n);
+            var n = Parser.Indent(1, String.Format("identifier: {0}", name.value));
+            return String.Format("ASTFunctionCall: {{\n{0}\n}}", n);
+        }
+    }
+
+    class ASTReturn : ASTStatement
+    {
+        public Expression expression;
+        public override string ToString()
+        {
+            var e = "";
+            if(expression != null)
+                expression.ToString();
+            return String.Format("ASTReturn: {{\n{0}}}", e);
         }
     }
 }

@@ -9,12 +9,15 @@ namespace experiment
 {
     class Lexer
     {
-        private string fileName;
-        private string source;
-        private string value;
-        private int iter;
-        private int lineNo = 1;
-        private int lineStart;
+        private const char EOFChar = (char)0; // Character value which is used to represent End Of File.
+        private string fileName;    // File which is being lexed
+        private string source;      // Contents of the file
+        private int index;          // Current index into source
+        private int lineNo = 1;     // Current line number
+        private int lineStartIndex; // The index at which the current line 
+
+        private Location tokenStart;// The start location of the token currently being evaluated
+        private string tokenValue;  // Value of the token currently being evaluated
 
         public Lexer(string fileName)
         {
@@ -24,67 +27,87 @@ namespace experiment
 
         public Token Lex()
         {
-            while (!EOF()) {
-                value = "";
+            while (true) {
+                tokenStart = GetLocation();
+                tokenValue = "";
 
-                var n = Peek();
-                if (Char.IsLetter(n))
+                var c = Consume();
+                if (c == EOFChar) return MakeToken(Token.Type.EOF);
+                if (Char.IsLetter(c))
                 {
                     while (Char.IsLetter(Peek())) Consume();
-                    if (IsKeyword()) return new Token(Loc(), Token.Type.Keyword, value);
-                    return new Token(Loc(), Token.Type.Identifier, value);
+                    if (IsKeyword()) return MakeToken(Token.Type.Keyword);
+                    return MakeToken(Token.Type.Identifier);
                 }
 
-                if (Char.IsWhiteSpace(n))
+                if (Char.IsWhiteSpace(c))
                 {
-                    Consume();
-                    if (n == '\n')
+                    if (c == '\n')
                     {
                         lineNo++;
-                        lineStart = iter;
+                        lineStartIndex = index;
                     }
                     continue;
                 }
 
-                switch(n)
+                switch(c)
                 {
-                    case '{': Consume(); return new Token(Loc(), Token.Type.BraceStart);
-                    case '}': Consume(); return new Token(Loc(), Token.Type.BraceEnd);
-                    case '(': Consume(); return new Token(Loc(), Token.Type.ParentStart);
-                    case ')': Consume(); return new Token(Loc(), Token.Type.ParentEnd);
+                    case '{': return MakeToken(Token.Type.BraceStart);
+                    case '}': return MakeToken(Token.Type.BraceEnd);
+                    case '(': return MakeToken(Token.Type.ParentStart);
+                    case ')': return MakeToken(Token.Type.ParentEnd);
                 }
 
-                throw new Exception("Unknown token: " + n);
+                throw new LexerException(tokenStart, $"unexpected token '{tokenValue}'");
             }
-
-            throw new Exception("End of file reached");
         }
 
-        private char Peek()     { return source[iter]; }
-        private void Consume()  { value += source[iter++]; }
-        private Loc Loc()       { return new Loc(fileName, lineNo, iter-lineStart); }
+        private char Peek()
+        {
+            if (EOF()) return EOFChar;
+            return source[index];
+        }
+        private char Consume()
+        {
+            var c = Peek();
+            tokenValue += c;
+            index++;
+            return c;
+        }
+        private Location GetLocation()
+        {
+            return new Location(fileName, lineNo, index-lineStartIndex);
+        }
 
         private bool IsKeyword()
         {
-            switch(value)
+            switch(tokenValue)
             {
-                case "func": return true;
+                case "func":    return true;
+                case "return":  return true;
             }
             return false;
         }
         public bool EOF()
         {
-            return iter == source.Length;
+            return index == source.Length;
+        }
+
+        private Token MakeToken(Token.Type t)
+        {
+            var end = GetLocation();
+            end.columnNo += 1;
+            return new Token(tokenStart, end, t, tokenValue);
         }
     }
 
-    class Loc
+    class Location
     {
         public string file;
         public int lineNo;
         public int columnNo;
 
-        public Loc(string file, int lineNo, int columnNo)
+        public Location(string file, int lineNo, int columnNo)
         {
             this.file = file;
             this.lineNo = lineNo;
@@ -99,14 +122,16 @@ namespace experiment
 
     class Token
     {
-        public enum Type { Keyword, Identifier, ParentStart, ParentEnd, BraceStart, BraceEnd };
+        public enum Type { Keyword, Identifier, ParentStart, ParentEnd, BraceStart, BraceEnd, EOF };
         public Type type;
         public string value;
-        public Loc loc;
+        public Location start;
+        public Location end;
 
-        public Token(Loc loc, Type type, string value = "")
+        public Token(Location start, Location end, Type type, string value = "")
         {
-            this.loc = loc;
+            this.start = start;
+            this.end = end;
             this.type = type;
             this.value = value;
         }
@@ -118,5 +143,15 @@ namespace experiment
                 return String.Format("[{0}:{1}]", typeStr, value);
             return String.Format("[{0}]", typeStr);
         }
+    }
+
+    class LexerException : Exception
+    {
+        public Location location;
+        public LexerException(Location location, string msg) : base(msg)
+        {
+            this.location = location;
+        }
+        public override string Message => String.Format("{0} at {1}", base.Message, location);
     }
 }
